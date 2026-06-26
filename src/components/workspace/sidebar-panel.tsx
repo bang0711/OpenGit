@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  RiAddLine,
   RiArrowDownLine,
   RiArrowDownSLine,
   RiArrowRightSLine,
@@ -19,6 +20,7 @@ import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import {
   checkoutBranch,
+  createBranch,
   deleteBranch,
   deleteRemoteBranch,
   mergeBranch,
@@ -28,6 +30,7 @@ import {
   stashPop,
 } from "@/app/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { NameDialog } from "@/components/name-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +79,16 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
   const remoteBranches = branches.filter((b) => b.isRemote);
   const current = local.find((b) => b.isCurrent)?.name ?? null;
 
+  const [newBranchOpen, setNewBranchOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const onCreateBranch = (name: string) => {
+    if (creating) return;
+    setCreating(true);
+    createBranch(name)
+      .then((r) => notify(r, `Created ${name}`))
+      .finally(() => setCreating(false));
+  };
+
   // Group remote branches under their remote name.
   const byRemote = new Map<string, Branch[]>();
   for (const b of remoteBranches) {
@@ -94,6 +107,26 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
             label="Local"
             count={local.length}
             defaultOpen
+            action={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                title="New branch"
+                disabled={creating}
+                onClick={() => setNewBranchOpen(true)}
+              >
+                <RiAddLine />
+              </Button>
+            }
+            contextActions={
+              <ContextMenuItem
+                disabled={creating}
+                onSelect={() => setNewBranchOpen(true)}
+              >
+                <RiAddLine className={ICON} />
+                New branch…
+              </ContextMenuItem>
+            }
           >
             {local.map((b) => (
               <BranchRow key={b.fullName} branch={b} current={current} />
@@ -152,6 +185,17 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
           </Section>
         </div>
       </ScrollArea>
+
+      <NameDialog
+        open={newBranchOpen}
+        onOpenChange={setNewBranchOpen}
+        title="New branch"
+        description="Creates a branch from the current HEAD and switches to it."
+        label="Branch name"
+        placeholder="feature/my-branch"
+        submitLabel="Create branch"
+        onSubmit={onCreateBranch}
+      />
     </div>
   );
 }
@@ -161,21 +205,25 @@ function Section({
   label,
   count,
   defaultOpen = false,
+  action,
+  contextActions,
   children,
 }: {
   icon: React.ReactNode;
   label: string;
   count: number;
   defaultOpen?: boolean;
+  action?: React.ReactNode;
+  contextActions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = usePersistedState(
     `opengit.section:${label}`,
     defaultOpen,
   );
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-sidebar-foreground/90 hover:bg-sidebar-accent">
+  const header = (
+    <div className="group/section flex items-center gap-0.5">
+      <CollapsibleTrigger className="flex flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-sidebar-foreground/90 hover:bg-sidebar-accent">
         {open ? (
           <RiArrowDownSLine className="size-3.5 text-muted-foreground" />
         ) : (
@@ -189,6 +237,25 @@ function Section({
           {count}
         </Badge>
       </CollapsibleTrigger>
+      {action ? (
+        <span className="shrink-0 opacity-0 group-hover/section:opacity-100 focus-within:opacity-100">
+          {action}
+        </span>
+      ) : null}
+    </div>
+  );
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      {contextActions ? (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
+          <ContextMenuContent className="w-48">
+            {contextActions}
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        header
+      )}
       <CollapsibleContent className="mt-0.5">{children}</CollapsibleContent>
     </Collapsible>
   );

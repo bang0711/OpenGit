@@ -5,12 +5,15 @@ import {
   RiArrowDownSLine,
   RiArrowGoBackLine,
   RiDeleteBinLine,
+  RiFileCopyLine,
+  RiFileTextLine,
   RiGitCommitLine,
   RiInboxArchiveLine,
   RiLoader4Line,
   RiSubtractLine,
 } from "@remixicon/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -29,6 +32,13 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NameDialog } from "@/components/name-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -310,40 +320,76 @@ function FileRow({
   onPrimary: () => void;
   onDiscard?: () => void;
 }) {
+  const router = useRouter();
   const code = file.untracked ? "?" : staged ? file.index : file.worktree;
+  const diffHref = `/diff?wt=1&file=${encodeURIComponent(file.path)}`;
+  const copyPath = () => {
+    navigator.clipboard?.writeText(file.path);
+    toast.success("Copied path");
+  };
   return (
-    <div className="group flex items-center gap-1.5 px-3 py-0.5 text-xs hover:bg-muted/50">
-      <StatusBadge code={code} />
-      <Link
-        href={{ pathname: "/diff", query: { wt: "1", file: file.path } }}
-        className="truncate hover:underline"
-        title={`View changes in ${file.path}`}
-      >
-        {file.path}
-      </Link>
-      <div className="ml-auto flex shrink-0 items-center opacity-0 group-hover:opacity-100">
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="group flex items-center gap-1.5 px-3 py-0.5 text-xs hover:bg-muted/50">
+          <StatusBadge code={code} />
+          <Link
+            href={{ pathname: "/diff", query: { wt: "1", file: file.path } }}
+            className="truncate hover:underline"
+            title={`View changes in ${file.path}`}
+          >
+            {file.path}
+          </Link>
+          <div className="ml-auto flex shrink-0 items-center opacity-0 group-hover:opacity-100">
+            {onDiscard ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                disabled={pending}
+                title="Discard changes"
+                onClick={onDiscard}
+              >
+                <RiArrowGoBackLine />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={pending}
+              title={staged ? "Unstage" : "Stage"}
+              onClick={onPrimary}
+            >
+              {staged ? <RiSubtractLine /> : <RiAddLine />}
+            </Button>
+          </div>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem onSelect={() => router.push(diffHref)}>
+          <RiFileTextLine />
+          View changes
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={pending} onSelect={onPrimary}>
+          {staged ? <RiSubtractLine /> : <RiAddLine />}
+          {staged ? "Unstage changes" : "Stage changes"}
+        </ContextMenuItem>
         {onDiscard ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
+          <ContextMenuItem
+            variant="destructive"
             disabled={pending}
-            title="Discard changes"
-            onClick={onDiscard}
+            onSelect={onDiscard}
           >
             <RiArrowGoBackLine />
-          </Button>
+            Discard changes
+          </ContextMenuItem>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          disabled={pending}
-          title={staged ? "Unstage" : "Stage"}
-          onClick={onPrimary}
-        >
-          {staged ? <RiSubtractLine /> : <RiAddLine />}
-        </Button>
-      </div>
-    </div>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={copyPath}>
+          <RiFileCopyLine />
+          Copy path
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

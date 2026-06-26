@@ -194,14 +194,14 @@ export async function discardFile(
 ): Promise<ActionState> {
   // Untracked files aren't tracked by git, so "discard" means delete them.
   return gitAction(
-    untracked ? ["clean", "-f", "--", file] : ["checkout", "--", file],
+    untracked ? ["clean", "-f", "--", file] : ["restore", "--", file],
   );
 }
 
 /** Discard all working-tree changes: revert tracked files and remove untracked. */
 export async function discardAll(): Promise<ActionState> {
   return mutate(async (repo) => {
-    await runGit(repo, ["checkout", "--", "."]);
+    await runGit(repo, ["restore", "--", "."]);
     await runGit(repo, ["clean", "-fd"]);
   });
 }
@@ -293,6 +293,12 @@ export async function createBranchAt(
 ): Promise<ActionState> {
   if (!name.trim()) return { error: "Branch name is required." };
   return gitAction(["branch", name, sha]);
+}
+
+/** Create a new branch from HEAD and switch to it (git switch -c). */
+export async function createBranch(name: string): Promise<ActionState> {
+  if (!name.trim()) return { error: "Branch name is required." };
+  return gitAction(["switch", "-c", name]);
 }
 
 export async function createTagAt(
