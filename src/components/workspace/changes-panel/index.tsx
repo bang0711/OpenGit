@@ -3,17 +3,12 @@
 import {
   RiAddLine,
   RiArrowDownSLine,
-  RiArrowGoBackLine,
   RiDeleteBinLine,
-  RiFileCopyLine,
-  RiFileTextLine,
   RiGitCommitLine,
   RiInboxArchiveLine,
   RiLoader4Line,
   RiSubtractLine,
 } from "@remixicon/react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -30,25 +25,17 @@ import {
 } from "@/app/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NameDialog } from "@/components/name-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import type { FileStatus } from "@/lib/git";
-import { cn } from "@/lib/utils";
+import { FileGroup } from "./file-group";
+import { FileRow } from "./file-row";
 
 type DiscardTarget =
   | { kind: "all" }
@@ -273,162 +260,5 @@ export function ChangesPanel({ files }: { files: FileStatus[] }) {
         onSubmit={onStash}
       />
     </div>
-  );
-}
-
-function FileGroup({
-  title,
-  count,
-  action,
-  children,
-}: {
-  title: string;
-  count: number;
-  action: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex max-h-[45%] min-h-9 flex-col border-b border-border">
-      <div className="flex h-9 shrink-0 items-center gap-2 px-3 text-xs font-semibold text-muted-foreground">
-        {title}
-        <Badge variant="secondary">{count}</Badge>
-        <div className="ml-auto flex items-center gap-1">{action}</div>
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        {count === 0 ? (
-          <p className="px-3 py-2 text-xs text-muted-foreground/60">
-            Nothing here.
-          </p>
-        ) : (
-          <div className="pb-1">{children}</div>
-        )}
-      </ScrollArea>
-    </div>
-  );
-}
-
-function FileRow({
-  file,
-  staged,
-  pending,
-  onPrimary,
-  onDiscard,
-}: {
-  file: FileStatus;
-  staged?: boolean;
-  pending: boolean;
-  onPrimary: () => void;
-  onDiscard?: () => void;
-}) {
-  const router = useRouter();
-  const code = file.untracked ? "?" : staged ? file.index : file.worktree;
-  const diffHref = `/diff?wt=1&file=${encodeURIComponent(file.path)}`;
-  const copyPath = () => {
-    navigator.clipboard?.writeText(file.path);
-    toast.success("Copied path");
-  };
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div className="group flex items-center gap-1.5 px-3 py-0.5 text-xs hover:bg-muted/50">
-          <StatusBadge code={code} />
-          <Link
-            href={{ pathname: "/diff", query: { wt: "1", file: file.path } }}
-            className="truncate hover:underline"
-            title={`View changes in ${file.path}`}
-          >
-            {file.path}
-          </Link>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <DiffStat
-              adds={staged ? file.stagedAdds : file.unstagedAdds}
-              dels={staged ? file.stagedDels : file.unstagedDels}
-            />
-            <div className="flex items-center opacity-0 group-hover:opacity-100">
-              {onDiscard ? (
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={pending}
-                  title="Discard changes"
-                  onClick={onDiscard}
-                >
-                  <RiArrowGoBackLine />
-                </Button>
-              ) : null}
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                disabled={pending}
-                title={staged ? "Unstage" : "Stage"}
-                onClick={onPrimary}
-              >
-                {staged ? <RiSubtractLine /> : <RiAddLine />}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={() => router.push(diffHref)}>
-          <RiFileTextLine />
-          View changes
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem disabled={pending} onSelect={onPrimary}>
-          {staged ? <RiSubtractLine /> : <RiAddLine />}
-          {staged ? "Unstage changes" : "Stage changes"}
-        </ContextMenuItem>
-        {onDiscard ? (
-          <ContextMenuItem
-            variant="destructive"
-            disabled={pending}
-            onSelect={onDiscard}
-          >
-            <RiArrowGoBackLine />
-            Discard changes
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={copyPath}>
-          <RiFileCopyLine />
-          Copy path
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  );
-}
-
-// Per-file line counts, mirroring the commit detail list. Hidden entirely when
-// there's nothing useful to show (untracked / binary report -1).
-function DiffStat({ adds, dels }: { adds: number; dels: number }) {
-  if (adds <= 0 && dels <= 0) return null;
-  return (
-    <span className="flex items-center gap-1 font-mono text-[0.625rem]">
-      {adds > 0 ? <span className="text-green-500">+{adds}</span> : null}
-      {dels > 0 ? <span className="text-red-500">−{dels}</span> : null}
-    </span>
-  );
-}
-
-function StatusBadge({ code }: { code: string }) {
-  const map: Record<string, string> = {
-    M: "text-amber-500",
-    A: "text-green-500",
-    D: "text-red-500",
-    R: "text-blue-500",
-    C: "text-blue-500",
-    "?": "text-muted-foreground",
-    U: "text-purple-500",
-  };
-  return (
-    <span
-      className={cn(
-        "flex size-3.5 shrink-0 items-center justify-center font-mono text-[0.625rem] font-bold",
-        map[code] ?? "text-muted-foreground",
-      )}
-    >
-      {code === "?" ? "U" : code}
-    </span>
   );
 }

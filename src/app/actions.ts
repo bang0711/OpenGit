@@ -325,6 +325,29 @@ export async function createBranch(name: string): Promise<ActionState> {
   return gitAction(["switch", "-c", name]);
 }
 
+/** Create a branch on the remote from HEAD only — no local branch, no switch. */
+export async function createRemoteBranch(
+  remote: string,
+  name: string,
+): Promise<ActionState> {
+  if (!name.trim()) return { error: "Branch name is required." };
+  if (!remote.trim()) return { error: "Remote is required." };
+  return gitAction(["push", remote, `HEAD:refs/heads/${name}`]);
+}
+
+/** Create a local branch from HEAD, switch to it, and push it (with tracking). */
+export async function publishBranch(
+  remote: string,
+  name: string,
+): Promise<ActionState> {
+  if (!name.trim()) return { error: "Branch name is required." };
+  if (!remote.trim()) return { error: "Remote is required." };
+  return mutate(async (repo) => {
+    await runGit(repo, ["switch", "-c", name]);
+    await runGit(repo, ["push", "-u", remote, name]);
+  });
+}
+
 export async function createTagAt(
   name: string,
   sha: string,

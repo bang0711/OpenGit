@@ -1,43 +1,26 @@
 "use client";
 
 import {
-  RiAddLine,
   RiArrowDownLine,
-  RiArrowDownSLine,
-  RiArrowRightSLine,
   RiArrowUpLine,
-  RiCloudLine,
   RiDeleteBinLine,
   RiEditLine,
   RiFileCopyLine,
   RiGitBranchLine,
   RiGitMergeLine,
-  RiInboxArchiveLine,
   RiMore2Line,
-  RiPriceTag3Line,
 } from "@remixicon/react";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import {
   checkoutBranch,
-  createBranch,
   deleteBranch,
   deleteRemoteBranch,
   mergeBranch,
   renameBranch,
-  stashApply,
-  stashDrop,
-  stashPop,
 } from "@/app/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { NameDialog } from "@/components/name-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -61,222 +44,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { usePersistedState } from "@/hooks/use-persisted-state";
-import type { Branch, Remote, Stash, Tag } from "@/lib/git";
+import type { Branch } from "@/lib/git";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-
-type Props = {
-  branches: Branch[];
-  remotes: Remote[];
-  tags: Tag[];
-  stashes: Stash[];
-};
-
-export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
-  const local = branches.filter((b) => !b.isRemote);
-  const remoteBranches = branches.filter((b) => b.isRemote);
-  const current = local.find((b) => b.isCurrent)?.name ?? null;
-
-  const [newBranchOpen, setNewBranchOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const onCreateBranch = (name: string) => {
-    if (creating) return;
-    setCreating(true);
-    createBranch(name)
-      .then((r) => notify(r, `Created ${name}`))
-      .finally(() => setCreating(false));
-  };
-
-  // Group remote branches under their remote name.
-  const byRemote = new Map<string, Branch[]>();
-  for (const b of remoteBranches) {
-    const remote = b.name.split("/")[0];
-    const list = byRemote.get(remote) ?? [];
-    list.push(b);
-    byRemote.set(remote, list);
-  }
-
-  return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-1 p-2">
-          <Section
-            icon={<RiGitBranchLine />}
-            label="Local"
-            count={local.length}
-            defaultOpen
-            action={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="New branch"
-                disabled={creating}
-                onClick={() => setNewBranchOpen(true)}
-              >
-                <RiAddLine />
-              </Button>
-            }
-            contextActions={
-              <ContextMenuItem
-                disabled={creating}
-                onSelect={() => setNewBranchOpen(true)}
-              >
-                <RiAddLine className={ICON} />
-                New branch…
-              </ContextMenuItem>
-            }
-          >
-            {local.map((b) => (
-              <BranchRow key={b.fullName} branch={b} current={current} />
-            ))}
-          </Section>
-
-          <Section
-            icon={<RiCloudLine />}
-            label="Remotes"
-            count={remoteBranches.length}
-            defaultOpen
-          >
-            {[...byRemote].map(([remote, list]) => {
-              const url = remotes.find((r) => r.name === remote)?.url;
-              return (
-                <div key={remote} className="mt-1">
-                  <div
-                    className="truncate px-2 py-0.5 text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase"
-                    title={url}
-                  >
-                    {remote}
-                  </div>
-                  {list.map((b) => (
-                    <BranchRow
-                      key={b.fullName}
-                      branch={b}
-                      current={current}
-                      remote
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </Section>
-
-          <Section icon={<RiPriceTag3Line />} label="Tags" count={tags.length}>
-            {tags.map((t) => (
-              <Row key={t.name}>
-                <RiPriceTag3Line className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate">{t.name}</span>
-                <span className="ml-auto font-mono text-[0.625rem] text-muted-foreground">
-                  {t.sha}
-                </span>
-              </Row>
-            ))}
-          </Section>
-
-          <Section
-            icon={<RiInboxArchiveLine />}
-            label="Stashes"
-            count={stashes.length}
-          >
-            {stashes.map((s) => (
-              <StashRow key={s.ref} stash={s} />
-            ))}
-          </Section>
-        </div>
-      </ScrollArea>
-
-      <NameDialog
-        open={newBranchOpen}
-        onOpenChange={setNewBranchOpen}
-        title="New branch"
-        description="Creates a branch from the current HEAD and switches to it."
-        label="Branch name"
-        placeholder="feature/my-branch"
-        submitLabel="Create branch"
-        onSubmit={onCreateBranch}
-      />
-    </div>
-  );
-}
-
-function Section({
-  icon,
-  label,
-  count,
-  defaultOpen = false,
-  action,
-  contextActions,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  defaultOpen?: boolean;
-  action?: React.ReactNode;
-  contextActions?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = usePersistedState(
-    `opengit.section:${label}`,
-    defaultOpen,
-  );
-  const header = (
-    <div className="group/section flex items-center gap-0.5">
-      <CollapsibleTrigger className="flex flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-sidebar-foreground/90 hover:bg-sidebar-accent">
-        {open ? (
-          <RiArrowDownSLine className="size-3.5 text-muted-foreground" />
-        ) : (
-          <RiArrowRightSLine className="size-3.5 text-muted-foreground" />
-        )}
-        <span className="[&_svg]:size-3.5 [&_svg]:text-muted-foreground">
-          {icon}
-        </span>
-        {label}
-        <Badge variant="secondary" className="ml-auto font-normal">
-          {count}
-        </Badge>
-      </CollapsibleTrigger>
-      {action ? (
-        <span className="shrink-0 opacity-0 group-hover/section:opacity-100 focus-within:opacity-100">
-          {action}
-        </span>
-      ) : null}
-    </div>
-  );
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      {contextActions ? (
-        <ContextMenu>
-          <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
-          <ContextMenuContent className="w-48">
-            {contextActions}
-          </ContextMenuContent>
-        </ContextMenu>
-      ) : (
-        header
-      )}
-      <CollapsibleContent className="mt-0.5">{children}</CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function Row({
-  children,
-  title,
-}: {
-  children: React.ReactNode;
-  title?: string;
-}) {
-  return (
-    <div
-      title={title}
-      className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 pl-6 text-xs"
-    >
-      {children}
-    </div>
-  );
-}
 
 type BranchAction = {
   key: string;
@@ -288,9 +58,9 @@ type BranchAction = {
   separatorBefore?: boolean;
 };
 
-const ICON = "mr-2 size-3.5";
+export const ICON = "mr-2 size-3.5";
 
-function BranchRow({
+export function BranchRow({
   branch,
   current,
   remote,
@@ -559,52 +329,5 @@ function BranchRow({
         }}
       />
     </>
-  );
-}
-
-function StashRow({ stash }: { stash: Stash }) {
-  const [pending, setPending] = useState(false);
-  const run = (fn: () => Promise<{ error?: string }>, success: string) => {
-    if (pending) return;
-    setPending(true);
-    fn()
-      .then((r) => notify(r, success))
-      .finally(() => setPending(false));
-  };
-
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          title={`${stash.ref}\n${stash.message}`}
-          className={cn(
-            "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 pl-6 text-xs hover:bg-sidebar-accent",
-            pending && "opacity-60",
-          )}
-        >
-          <RiInboxArchiveLine className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">{stash.message}</span>
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-44">
-        <ContextMenuItem
-          onSelect={() => run(() => stashApply(stash.ref), "Stash applied")}
-        >
-          Apply
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => run(() => stashPop(stash.ref), "Stash popped")}
-        >
-          Pop (apply &amp; drop)
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          className="text-destructive"
-          onSelect={() => run(() => stashDrop(stash.ref), "Stash dropped")}
-        >
-          Drop
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
   );
 }

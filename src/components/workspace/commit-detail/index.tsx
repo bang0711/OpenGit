@@ -1,13 +1,13 @@
 "use client";
 
 import { RiGitCommitLine, RiLoader4Line, RiUser3Line } from "@remixicon/react";
-import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { commitDetail } from "@/app/actions";
+import { Notice } from "@/components/shared/notice";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { CommitDetail, CommitFile } from "@/lib/git";
-import { cn } from "@/lib/utils";
+import type { CommitDetail } from "@/lib/git";
+import { FileRow } from "./file-row";
 
 export function CommitDetailPane({ sha }: { sha: string | null }) {
   const [detail, setDetail] = useState<CommitDetail | null>(null);
@@ -46,7 +46,9 @@ export function CommitDetailPane({ sha }: { sha: string | null }) {
       </div>
 
       {!sha ? (
-        <Empty>Select a commit to view its details.</Empty>
+        <Notice className="p-4 text-xs">
+          Select a commit to view its details.
+        </Notice>
       ) : error ? (
         <p className="text-destructive p-3 text-xs">{error}</p>
       ) : detail ? (
@@ -96,57 +98,10 @@ export function CommitDetailPane({ sha }: { sha: string | null }) {
           </div>
         </ScrollArea>
       ) : (
-        <Empty>
+        <Notice className="p-4 text-xs">
           <RiLoader4Line className="size-5 animate-spin" />
-        </Empty>
+        </Notice>
       )}
     </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-xs">
-      {children}
-    </div>
-  );
-}
-
-function FileRow({ file, sha }: { file: CommitFile; sha: string }) {
-  const color: Record<string, string> = {
-    A: "text-green-500",
-    M: "text-amber-500",
-    D: "text-red-500",
-    R: "text-blue-500",
-    C: "text-blue-500",
-  };
-  return (
-    <Link
-      href={{ pathname: "/diff", query: { sha, file: file.path } }}
-      title="View changes"
-      className="hover:bg-muted/50 flex w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-xs"
-    >
-      <span
-        className={cn(
-          "w-3 shrink-0 text-center font-mono font-bold",
-          color[file.status] ?? "text-muted-foreground",
-        )}
-      >
-        {file.status}
-      </span>
-      <span className="truncate" title={file.path}>
-        {file.path}
-      </span>
-      <span className="ml-auto shrink-0 font-mono text-[0.625rem]">
-        {file.additions >= 0 ? (
-          <span className="text-green-500">+{file.additions}</span>
-        ) : null}{" "}
-        {file.deletions >= 0 ? (
-          <span className="text-red-500">−{file.deletions}</span>
-        ) : (
-          <span className="text-muted-foreground">binary</span>
-        )}
-      </span>
-    </Link>
   );
 }

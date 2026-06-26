@@ -9,45 +9,10 @@ import {
 import Link from "next/link";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import type { TreeNode } from "@/lib/file-tree";
-import type { CommitFile } from "@/lib/git";
 import { cn } from "@/lib/utils";
+import { Stat } from "./stat";
 
-const STATUS_COLOR: Record<string, string> = {
-  A: "text-green-500",
-  M: "text-amber-500",
-  D: "text-red-500",
-  R: "text-blue-500",
-  C: "text-blue-500",
-};
-
-export function FileTree({
-  nodes,
-  sha,
-  selected,
-  wt,
-}: {
-  nodes: TreeNode[];
-  sha?: string;
-  selected: string | null;
-  wt?: boolean;
-}) {
-  return (
-    <div className="flex flex-col py-1 text-xs">
-      {nodes.map((node) => (
-        <TreeItem
-          key={node.path}
-          node={node}
-          sha={sha}
-          selected={selected}
-          wt={wt}
-          depth={0}
-        />
-      ))}
-    </div>
-  );
-}
-
-function TreeItem({
+export function TreeItem({
   node,
   sha,
   selected,
@@ -117,21 +82,5 @@ function TreeItem({
       <span className="truncate">{node.name}</span>
       <Stat file={node.file} />
     </Link>
-  );
-}
-
-function Stat({ file }: { file: CommitFile }) {
-  return (
-    <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[0.625rem]">
-      <span className={cn("font-bold", STATUS_COLOR[file.status])}>
-        {file.status}
-      </span>
-      {file.additions >= 0 ? (
-        <span className="text-green-500">+{file.additions}</span>
-      ) : null}
-      {file.deletions >= 0 ? (
-        <span className="text-red-500">−{file.deletions}</span>
-      ) : null}
-    </span>
   );
 }

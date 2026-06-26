@@ -5,7 +5,7 @@ import { CopyButton } from "@/components/copy-button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import type { DiffRow } from "@/lib/diff";
-import { cn } from "@/lib/utils";
+import { DiffRows } from "./diff-rows";
 
 /**
  * Azure-style side-by-side diff with a draggable divider. Rows share one
@@ -85,92 +85,6 @@ export function SideBySideDiff({
           className="absolute top-0 bottom-0 -ml-1 w-2 cursor-col-resize hover:bg-primary/30"
         />
       </div>
-    </div>
-  );
-}
-
-function DiffRows({
-  rows,
-  cols,
-}: {
-  rows: DiffRow[];
-  cols: React.CSSProperties;
-}) {
-  // Manual key counter — rows are static and positional.
-  const els: React.ReactNode[] = [];
-  let k = 0;
-  for (const row of rows) {
-    els.push(<Row key={`r${k++}`} row={row} cols={cols} />);
-  }
-  return <>{els}</>;
-}
-
-function Row({ row, cols }: { row: DiffRow; cols: React.CSSProperties }) {
-  if (row.type === "hunk") {
-    return (
-      <div className="bg-primary/10 text-primary border-border border-y px-3 py-0.5">
-        {row.text}
-      </div>
-    );
-  }
-  return (
-    <div className="grid" style={cols}>
-      <Cell
-        no={row.leftNo}
-        text={row.leftText}
-        tone={row.leftDel ? "del" : "ctx"}
-        sign={row.leftDel ? "-" : " "}
-        className="border-border border-r"
-      />
-      <Cell
-        no={row.rightNo}
-        text={row.rightText}
-        tone={row.rightAdd ? "add" : "ctx"}
-        sign={row.rightAdd ? "+" : " "}
-      />
-    </div>
-  );
-}
-
-function Cell({
-  no,
-  text,
-  tone,
-  sign,
-  className,
-}: {
-  no: number | null;
-  text: string | null;
-  tone: "add" | "del" | "ctx";
-  sign: string;
-  className?: string;
-}) {
-  const empty = text === null;
-  return (
-    <div
-      className={cn(
-        "flex min-w-0",
-        empty && "bg-muted/30",
-        tone === "add" && "bg-green-500/10",
-        tone === "del" && "bg-red-500/10",
-        className,
-      )}
-    >
-      <span className="text-muted-foreground w-12 shrink-0 px-2 text-right select-none">
-        {no ?? ""}
-      </span>
-      {!empty ? (
-        <span
-          className={cn(
-            "w-full px-2 break-words whitespace-pre-wrap",
-            tone === "add" && "text-green-300",
-            tone === "del" && "text-red-300",
-          )}
-        >
-          <span className="text-muted-foreground/60 select-none">{sign} </span>
-          {text}
-        </span>
-      ) : null}
     </div>
   );
 }
