@@ -3,7 +3,6 @@ import "server-only";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { devNull } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -15,42 +14,13 @@ const RS = "\x1e";
 
 const MAX_BUFFER = 64 * 1024 * 1024;
 
-// Hard wall-clock cap per git invocation. A hung git (auth prompt, dead remote)
-// would otherwise pin a request forever. Override with OPENGIT_GIT_TIMEOUT_MS.
-const GIT_TIMEOUT_MS = Number(process.env.OPENGIT_GIT_TIMEOUT_MS) || 30_000;
-
-// Global flags prepended to EVERY git call. Pointing core.hooksPath at the null
-// device means git finds no hook scripts — a cloned/uploaded repo can't run
-// arbitrary code on the server via post-checkout/pre-commit/etc. hooks.
-const SAFE_FLAGS = ["-c", `core.hooksPath=${devNull}`];
-
-// Minimal, allow-listed environment for the git subprocess. Spreading the
-// server's full process.env would leak every secret into git AND into anything
-// git might exec. We pass only what git needs to run, plus hardening vars.
-function gitEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
-  const e = process.env;
-  const base: NodeJS.ProcessEnv = {
-    NODE_ENV: e.NODE_ENV,
-    PATH: e.PATH,
-    // git on Windows needs these to locate itself and the user profile.
-    SystemRoot: e.SystemRoot,
-    SYSTEMROOT: e.SYSTEMROOT,
-    HOME: e.HOME,
-    USERPROFILE: e.USERPROFILE,
-    APPDATA: e.APPDATA,
-    LOCALAPPDATA: e.LOCALAPPDATA,
-    // Never block on an interactive prompt: fail fast instead of hanging.
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_ASKPASS: "",
-    SSH_ASKPASS: "",
-    // Ignore /etc/gitconfig — don't inherit machine-wide config on a shared host.
-    GIT_CONFIG_NOSYSTEM: "1",
-  };
-  return extra ? { ...base, ...extra } : base;
-}
-
 export type GitResult = { stdout: string; stderr: string };
 
+// Desktop app: git runs as the user, with their full environment, global/system
+// config, credential manager (GCM), SSH agent and hooks — exactly like their
+// terminal. No env scoping, no prompt-disabling, no timeout: those belong to a
+// multi-tenant server, which this is not. Interactive auth (GCM popup) must be
+// allowed to take as long as the user needs.
 /** Run a git command in `cwd`. Throws GitError on non-zero exit. */
 export async function runGit(
   cwd: string,
@@ -58,17 +28,12 @@ export async function runGit(
   opts?: { env?: Record<string, string> },
 ): Promise<GitResult> {
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "git",
-      [...SAFE_FLAGS, ...args],
-      {
-        cwd,
-        maxBuffer: MAX_BUFFER,
-        windowsHide: true,
-        timeout: GIT_TIMEOUT_MS,
-        env: gitEnv(opts?.env),
-      },
-    );
+    const { stdout, stderr } = await execFileAsync("git", args, {
+      cwd,
+      maxBuffer: MAX_BUFFER,
+      windowsHide: true,
+      env: opts?.env ? { ...process.env, ...opts.env } : process.env,
+    });
     return { stdout, stderr };
   } catch (err) {
     const e = err as { stderr?: string; message?: string; stdout?: string };
