@@ -20,6 +20,7 @@ import {
 } from "@/app/actions";
 import { GitLogo } from "@/components/git-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { UpdateChecker } from "@/components/update-checker";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -118,6 +119,7 @@ export function Topbar({ repo, current, branches }: Props) {
 
         <Separator orientation="vertical" className="mx-1 !h-5" />
 
+        <UpdateChecker />
         <ThemeSwitcher />
 
         <Tooltip>

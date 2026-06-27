@@ -29,7 +29,7 @@ export function WorkingTreeViewer({
   initialFile: string | null;
 }) {
   const [selected, setSelected] = useState(initialFile);
-  console.log("selected", selected);
+
   return (
     <div className="bg-background flex h-screen flex-col">
       <header className="border-border bg-card flex h-11 shrink-0 items-center gap-3 border-b px-3">

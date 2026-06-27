@@ -25,7 +25,7 @@ export function DiffPane({
   // the first load (no patch yet).
   if (pending && patch === null) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         <RiLoader4Line className="size-5 animate-spin" />
       </div>
     );

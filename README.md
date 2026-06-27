@@ -12,6 +12,7 @@ A desktop Git client in the spirit of GitKraken — a visual commit graph, branc
 - **Conflict resolver** for merges and rebases.
 - **Themes** — switchable palettes (GitKraken, Dracula, Catppuccin Mocha, Nord, Tokyo Night, GitHub Dark, Zinc) via the topbar.
 - **Live refresh** — the view re-reads repo state on window focus and while foregrounded, so edits show up without a manual reload.
+- **Auto-update** — in-app "check for updates" (topbar ⟳) backed by GitHub Releases: download, then restart-to-install.
 
 ## Stack
 
@@ -45,16 +46,26 @@ bun run electron:dev
 bun run electron:build
 ```
 
-This runs `next build` (standalone output), merges static assets via `scripts/prepare-standalone.mjs`, then packages with `electron-builder`. The packaged app runs the Next standalone server as a child process and points an Electron window at it. The standalone bundle (with its own `node_modules`) ships as an Electron **`extraResource`** at `resources/server` — `extraResources` copies `node_modules` verbatim, whereas the app `files` mapping strips it, which is why a plain `files` copy fails with `Cannot find module 'next'`.
+This runs `next build` (standalone output), merges static assets via `scripts/prepare-standalone.mjs`, then packages with `electron-builder`. The packaged app runs the Next standalone server as a child process and points an Electron window at it.
+
+Two packaging details worth knowing:
+
+- **The server bundle ships via an `afterPack` hook** (`scripts/after-pack.cjs`), not the normal `files`/`extraResources` copy — electron-builder strips `node_modules` from those, which breaks `require('next')`. The hook copies `.next/standalone` verbatim (with its own `node_modules`) into `resources/server`, then prunes it to the runtime files.
+- **Only `electron-updater` is a runtime `dependency`.** The main process needs it; everything else (next/react/…) is a `devDependency`, because the server bundle ships its own copies. This keeps the packaged app small (the whole root `node_modules` would otherwise be bundled).
+
+`electron-builder` only builds for the **host OS** — running it on Windows produces Windows installers only. macOS `.dmg` can be built **only on a Mac** (Apple requirement, no cross-build); Linux `AppImage` builds on Linux. To produce all three at once, use the release workflow (below).
 
 ### Build outputs (`release/`)
 
 | File | What it is | Use |
 |------|-----------|-----|
 | `release/win-unpacked/OpenGit.exe` | Unpacked app, runs in place — **no install** | Fast local testing of a build |
-| `release/OpenGit-Setup-<version>.exe` | NSIS installer (installs to `AppData\Local\Programs`, shortcuts) | Distribute to users |
+| `release/OpenGit-Setup-<version>.exe` | NSIS installer (to `AppData\Local\Programs`, shortcuts) | Distribute to users |
+| `release/OpenGit-<version>-portable.exe` | Single self-contained exe — **runs without installing** | Users who don't want to install |
+| `release/OpenGit-<version>.dmg` *(macOS host)* | macOS disk image | macOS users |
+| `release/OpenGit-<version>.AppImage` *(Linux host)* | Linux AppImage | Linux users |
 
-Test a build with `win-unpacked\OpenGit.exe` first (no install/uninstall churn); both contain the same `resources\server`, so if the unpacked app boots clean, the installer will too.
+Test a build with `win-unpacked\OpenGit.exe` first (no install/uninstall churn); it contains the same `resources\server`, so if it boots clean, the installers will too.
 
 Sanity-check the server runtime made it into a build before shipping:
 
@@ -64,14 +75,24 @@ Test-Path 'release\win-unpacked\resources\server\node_modules\next\package.json'
 
 ### Publishing a release
 
-`release/` is git-ignored — the installer ships via **GitHub Releases**, not the repo (keeps history small). Build + sign locally, then attach the installer to a tagged release:
+`release/` is git-ignored — installers ship via **GitHub Releases**, not the repo.
+
+**All OSes (recommended) — CI.** `.github/workflows/release.yml` builds on `windows-latest`, `macos-latest`, and `ubuntu-latest` and publishes every installer to one GitHub Release. Bump `version` in `package.json`, commit, then push a matching tag:
 
 ```bash
-bun run electron:build      # produces release/OpenGit-Setup-<version>.exe (signed)
-bun run release             # uploads it to GitHub Release v<version>
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
-`bun run release` (`scripts/release.mjs`) reads the version from `package.json`, creates/updates the `v<version>` tag's release via the `gh` CLI, and uploads the installer. Prereqs: [`gh`](https://cli.github.com) installed + `gh auth login`, and the current commit pushed to origin. Bump the `version` in `package.json` before cutting a new release.
+The three jobs upload to a **draft** release — review it under **Releases** and click **Publish**. `electron-updater` reads the per-OS `latest*.yml` (also uploaded) to power in-app updates. CI builds are **unsigned** (no certs), so users get SmartScreen / Gatekeeper warnings, and macOS auto-update won't apply (the dmg still runs) until the app is signed.
+
+**Windows only — local.** Build + sign locally, then upload with the `gh` CLI:
+
+```bash
+bun run electron:build      # release/OpenGit-Setup-<version>.exe (+ portable, signed)
+bun run release             # uploads to GitHub Release v<version>
+```
+
+`scripts/release.mjs` needs [`gh`](https://cli.github.com) installed + `gh auth login`, and the current commit pushed.
 
 ## Scripts
 
@@ -80,7 +101,8 @@ bun run release             # uploads it to GitHub Release v<version>
 | `dev` | Next dev server (browser) |
 | `electron:dev` | Next dev + Electron window |
 | `build` | `next build` |
-| `electron:build` | Full packaged desktop build |
-| `release` | Upload the built installer to a GitHub Release (`gh` required) |
+| `electron:build` | Full packaged desktop build (host OS) |
+| `electron:publish` | Build + publish to GitHub Releases (used by CI) |
+| `release` | Upload the locally-built Windows installer via `gh` |
 | `lint` / `format` | Biome check / format |
 | `licenses` | Regenerate `THIRD-PARTY-NOTICES.txt` |

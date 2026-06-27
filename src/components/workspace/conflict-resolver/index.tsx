@@ -56,8 +56,8 @@ export function ConflictResolver({
     });
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
+    <div className="bg-background flex h-screen flex-col">
+      <header className="border-border bg-card flex h-11 shrink-0 items-center gap-3 border-b px-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/">
             <RiArrowLeftLine />
@@ -99,14 +99,14 @@ export function ConflictResolver({
       </header>
 
       {files.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
           All conflicts resolved — click <b className="mx-1">Continue</b> to
           finish.
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <aside className="relative w-64 shrink-0 border-r border-border bg-sidebar">
-            <ScrollArea className="absolute inset-0">
+          <aside className="border-border bg-sidebar relative w-64 shrink-0 border-r">
+            <ScrollArea className="inset-0 h-full">
               <div className="py-1 text-xs">
                 {files.map((f) => (
                   <button

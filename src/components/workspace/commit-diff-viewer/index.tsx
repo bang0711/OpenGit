@@ -112,7 +112,7 @@ export function CommitDiffViewer({
           maxSize="45%"
           className="relative"
         >
-          <ScrollArea className="bg-sidebar absolute inset-0">
+          <ScrollArea className="bg-sidebar inset-0 h-full">
             <FileTree
               nodes={nodes}
               selected={selected}

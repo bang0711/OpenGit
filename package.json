@@ -15,7 +15,8 @@
     "licenses": "generate-license-file --input package.json --output THIRD-PARTY-NOTICES.txt --overwrite",
     "release": "node scripts/release.mjs",
     "electron:dev": "concurrently -k -n NEXT,ELECTRON -c yellow,blue \"next dev\" \"electron .\"",
-    "electron:build": "node scripts/generate-icons.mjs && bun run licenses && next build && node scripts/prepare-standalone.mjs && electron-builder"
+    "electron:build": "node scripts/generate-icons.mjs && bun run licenses && next build && node scripts/prepare-standalone.mjs && electron-builder",
+    "electron:publish": "node scripts/generate-icons.mjs && bun run licenses && next build && node scripts/prepare-standalone.mjs && electron-builder --publish always"
   },
   "build": {
     "appId": "com.opengit.desktop",
@@ -29,6 +30,13 @@
       "en-US"
     ],
     "afterPack": "scripts/after-pack.cjs",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bang0711",
+        "repo": "OpenGit"
+      }
+    ],
     "files": [
       {
         "from": ".",
@@ -36,13 +44,15 @@
           "electron/**/*",
           "package.json",
           "THIRD-PARTY-NOTICES.txt",
-          "!node_modules/**",
           "!**/*.map"
         ]
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {
@@ -54,6 +64,9 @@
       "shortcutName": "OpenGit",
       "artifactName": "OpenGit-Setup-${version}.${ext}"
     },
+    "portable": {
+      "artifactName": "OpenGit-${version}-portable.${ext}"
+    },
     "mac": {
       "target": "dmg"
     },
@@ -62,11 +75,26 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.0",
     "@remixicon/react": "^4.9.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/prismjs": "^1.26.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "concurrently": "^10.0.3",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "generate-license-file": "^4.2.1",
     "material-file-icons": "^2.4.0",
     "next": "16.2.9",
+    "prettier": "^3.8.4",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "prismjs": "^1.30.0",
     "radix-ui": "^1.6.0",
     "react": "19.2.4",
@@ -76,22 +104,8 @@
     "shadcn": "^4.11.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
-    "tw-animate-css": "^1.4.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.2.0",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/prismjs": "^1.26.6",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "concurrently": "^10.0.3",
-    "electron": "^42.5.0",
-    "electron-builder": "^26.15.3",
-    "generate-license-file": "^4.2.1",
-    "prettier": "^3.8.4",
-    "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4",
+    "tw-animate-css": "^1.4.0",
     "typescript": "^5"
   },
   "ignoreScripts": [

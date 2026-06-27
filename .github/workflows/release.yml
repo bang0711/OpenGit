@@ -1,0 +1,33 @@
+name: Release
+
+# Build installers for all three OSes and publish them to a GitHub Release.
+# Trigger by pushing a version tag:  git tag v1.1.0 && git push origin v1.1.0
+# (bump "version" in package.json to match first).
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write # electron-builder needs to create/upload the release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build & publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No code-signing certs on CI — skip macOS signing so the dmg builds.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: bun run electron:publish
