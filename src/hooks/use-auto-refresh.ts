@@ -4,26 +4,32 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Keep the page's server-component data in sync with on-disk repo state:
- * re-fetch on window focus / tab-visible, and poll while the window is in the
- * foreground. The page is `force-dynamic`, so router.refresh() re-runs git.
+ * Keep the page's server-component data in sync with on-disk repo state.
  *
- * ponytail: poll + focus, not a filesystem watcher — covers the edit-then-
- * review flow with zero deps. Upgrade path if you want true push: a chokidar
- * watcher on the repo streaming over SSE to trigger refresh().
+ * Event-driven: the server watches the repo (fs.watch) and pushes a debounced
+ * "change" over SSE (`/api/watch`); we refresh on it. No polling. Focus /
+ * visibility refresh is kept as a cheap fallback for the gaps the watcher can't
+ * cover (e.g. Linux, where recursive fs.watch is unsupported, or a missed
+ * event while the tab was hidden). `repoPath` re-subscribes on repo switch.
  */
-export function useAutoRefresh(intervalMs = 4000) {
+export function useAutoRefresh(repoPath?: string) {
   const router = useRouter();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repoPath re-subscribes the watcher on repo switch
   useEffect(() => {
-    const visible = () => document.visibilityState === "visible";
-    const refresh = () => visible() && router.refresh();
+    const refresh = () =>
+      document.visibilityState === "visible" && router.refresh();
+
+    const es = new EventSource("/api/watch");
+    es.onmessage = (e) => {
+      if (e.data === "change") refresh();
+    };
+
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
-    const id = setInterval(refresh, intervalMs);
     return () => {
+      es.close();
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
-      clearInterval(id);
     };
-  }, [router, intervalMs]);
+  }, [router, repoPath]);
 }

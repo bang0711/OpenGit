@@ -33,7 +33,7 @@ export default async function Home() {
       safe(getRemotes(repoPath), []),
       safe(getTags(repoPath), []),
       safe(getStashes(repoPath), []),
-      safe(getCommits(repoPath, 300), []),
+      safe(getCommits(repoPath, 100), []),
       safe(getStatus(repoPath), []),
       safe(getMergeState(repoPath), {
         conflicted: [],

@@ -1,6 +1,6 @@
 {
   "name": "OpenGit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "A git client desktop app",
   "author": "Chau Chan Bang <chau.chan.bang@pwc.com>",
@@ -13,6 +13,7 @@
     "format": "biome format --write",
     "icons": "node scripts/generate-icons.mjs",
     "licenses": "generate-license-file --input package.json --output THIRD-PARTY-NOTICES.txt --overwrite",
+    "release": "node scripts/release.mjs",
     "electron:dev": "concurrently -k -n NEXT,ELECTRON -c yellow,blue \"next dev\" \"electron .\"",
     "electron:build": "node scripts/generate-icons.mjs && bun run licenses && next build && node scripts/prepare-standalone.mjs && electron-builder"
   },
@@ -24,13 +25,20 @@
       "buildResources": "build"
     },
     "asar": false,
+    "electronLanguages": [
+      "en-US"
+    ],
+    "afterPack": "scripts/after-pack.cjs",
     "files": [
-      "electron/**/*",
-      "package.json",
-      "THIRD-PARTY-NOTICES.txt",
       {
-        "from": ".next/standalone",
-        "to": "server"
+        "from": ".",
+        "filter": [
+          "electron/**/*",
+          "package.json",
+          "THIRD-PARTY-NOTICES.txt",
+          "!node_modules/**",
+          "!**/*.map"
+        ]
       }
     ],
     "win": {

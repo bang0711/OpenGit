@@ -38,7 +38,7 @@ export type WorkspaceData = {
 };
 
 export function Workspace(data: WorkspaceData) {
-  useAutoRefresh();
+  useAutoRefresh(data.repo.path);
   const current = data.branches.find((b) => b.isCurrent) ?? null;
   const [selected, setSelected] = usePersistedState<string | null>(
     `opengit.commit:${data.repo.path}`,

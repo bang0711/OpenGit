@@ -66,10 +66,11 @@ function waitForPort(port, timeoutMs = 30000) {
 }
 
 function startProdServer(port) {
-  // The Next standalone bundle ships inside the app (build.files from/to:
-  // "server", asar disabled), so server.js + its node_modules are real files at
-  // <appPath>/server. server.js reads PORT/HOSTNAME from env.
-  const appDir = path.join(app.getAppPath(), "server");
+  // The Next standalone bundle ships verbatim as an extraResource (to:
+  // "server"), so server.js + its self-contained node_modules land at
+  // <resources>/server. extraResources copies node_modules as-is — unlike the
+  // app `files` mapping, which strips node_modules. server.js reads PORT/HOSTNAME.
+  const appDir = path.join(process.resourcesPath, "server");
   const serverJs = path.join(appDir, "server.js");
   log("starting server:", serverJs, "exists:", existsSync(serverJs), "port:", port);
 
