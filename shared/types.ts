@@ -195,6 +195,9 @@ export interface Api {
   stashDrop(ref: string): Promise<ActionState>;
   stageHunk(file: string, index: number): Promise<ActionState>;
   unstageHunk(file: string, index: number): Promise<ActionState>;
+  revertHunk(file: string, index: number): Promise<ActionState>;
+  revertWorkingHunk(file: string, index: number): Promise<ActionState>;
+  stageWorkingHunk(file: string, index: number): Promise<ActionState>;
   interactiveRebase(
     base: string,
     ops: Record<string, RebaseOp>,

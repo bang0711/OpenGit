@@ -449,16 +449,18 @@ export const stashApply = (ref: string) => gitAction(["stash", "apply", ref]);
 export const stashPop = (ref: string) => gitAction(["stash", "pop", ref]);
 export const stashDrop = (ref: string) => gitAction(["stash", "drop", ref]);
 
-// ── Hunk-level staging ──────────────────────────────────────────────────────
+// ── Hunk-level staging / revert ─────────────────────────────────────────────
+// `args` are the full flags after `git apply` — e.g. ["--cached"] targets the
+// index, ["--reverse"] alone targets the working tree (a discard).
 async function applyPatch(
   repo: string,
   patch: string,
-  extra: string[],
+  args: string[],
 ): Promise<void> {
   const tmp = join(tmpdir(), `opengit-${Date.now()}-${process.pid}.patch`);
   await writeFile(tmp, patch);
   try {
-    await runGit(repo, ["apply", "--cached", ...extra, tmp]);
+    await runGit(repo, ["apply", ...args, tmp]);
   } finally {
     await unlink(tmp).catch(() => {});
   }
@@ -469,7 +471,7 @@ export const stageHunk = (file: string, index: number) =>
       await getUnstagedFileDiff(repo, file),
     );
     if (!hunks[index]) throw new GitError("Hunk no longer matches.", []);
-    await applyPatch(repo, `${header}\n${hunks[index]}\n`, []);
+    await applyPatch(repo, `${header}\n${hunks[index]}\n`, ["--cached"]);
   });
 export const unstageHunk = (file: string, index: number) =>
   mutate(async (repo) => {
@@ -477,7 +479,37 @@ export const unstageHunk = (file: string, index: number) =>
       await getStagedFileDiff(repo, file),
     );
     if (!hunks[index]) throw new GitError("Hunk no longer matches.", []);
+    await applyPatch(repo, `${header}\n${hunks[index]}\n`, [
+      "--cached",
+      "--reverse",
+    ]);
+  });
+/** Discard one hunk of a file's unstaged changes (revert it in the worktree). */
+export const revertHunk = (file: string, index: number) =>
+  mutate(async (repo) => {
+    const { header, hunks } = splitDiffIntoHunks(
+      await getUnstagedFileDiff(repo, file),
+    );
+    if (!hunks[index]) throw new GitError("Hunk no longer matches.", []);
     await applyPatch(repo, `${header}\n${hunks[index]}\n`, ["--reverse"]);
+  });
+/** Discard one hunk shown in the working-vs-HEAD (split) diff. */
+export const revertWorkingHunk = (file: string, index: number) =>
+  mutate(async (repo) => {
+    const { header, hunks } = splitDiffIntoHunks(
+      await getWorkingFileDiff(repo, file),
+    );
+    if (!hunks[index]) throw new GitError("Hunk no longer matches.", []);
+    await applyPatch(repo, `${header}\n${hunks[index]}\n`, ["--reverse"]);
+  });
+/** Stage one hunk shown in the working-vs-HEAD (split) diff. */
+export const stageWorkingHunk = (file: string, index: number) =>
+  mutate(async (repo) => {
+    const { header, hunks } = splitDiffIntoHunks(
+      await getWorkingFileDiff(repo, file),
+    );
+    if (!hunks[index]) throw new GitError("Hunk no longer matches.", []);
+    await applyPatch(repo, `${header}\n${hunks[index]}\n`, ["--cached"]);
   });
 
 // ── Interactive rebase ──────────────────────────────────────────────────────

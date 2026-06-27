@@ -57,6 +57,9 @@ export const API_CHANNELS = [
   "stashDrop",
   "stageHunk",
   "unstageHunk",
+  "revertHunk",
+  "revertWorkingHunk",
+  "stageWorkingHunk",
   "interactiveRebase",
 ] as const;
 

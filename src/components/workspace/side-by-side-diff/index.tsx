@@ -19,6 +19,8 @@ export function SideBySideDiff({
   oldText,
   newText,
   lang,
+  onStageHunk,
+  onRevertHunk,
 }: {
   rows: DiffRow[];
   oldLabel: string;
@@ -26,6 +28,8 @@ export function SideBySideDiff({
   oldText: string;
   newText: string;
   lang?: string;
+  onStageHunk?: (index: number) => void;
+  onRevertHunk?: (index: number) => void;
 }) {
   const [leftPct, setLeftPct] = usePersistedState("opengit.diffSplit", 50);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -74,7 +78,13 @@ export function SideBySideDiff({
       <div ref={wrapRef} className="relative min-h-0 flex-1">
         <ScrollArea className="inset-0 h-full">
           <div>
-            <DiffRows rows={rows} cols={cols} lang={lang} />
+            <DiffRows
+              rows={rows}
+              cols={cols}
+              lang={lang}
+              onStage={onStageHunk}
+              onRevert={onRevertHunk}
+            />
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>

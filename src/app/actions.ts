@@ -67,4 +67,7 @@ export const stashPop = api.stashPop;
 export const stashDrop = api.stashDrop;
 export const stageHunk = api.stageHunk;
 export const unstageHunk = api.unstageHunk;
+export const revertHunk = api.revertHunk;
+export const revertWorkingHunk = api.revertWorkingHunk;
+export const stageWorkingHunk = api.stageWorkingHunk;
 export const interactiveRebase = api.interactiveRebase;

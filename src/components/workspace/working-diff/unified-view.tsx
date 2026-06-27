@@ -1,6 +1,10 @@
 "use client";
 
-import { RiAddLine, RiSubtractLine } from "@remixicon/react";
+import {
+  RiAddLine,
+  RiArrowGoBackLine,
+  RiSubtractLine,
+} from "@remixicon/react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { splitDiffIntoHunks } from "@/lib/diff";
 import { Section } from "./hunk-section";
@@ -11,11 +15,13 @@ export function UnifiedView({
   pending,
   onStage,
   onUnstage,
+  onRevert,
 }: {
   hunks: HunkData | null;
   pending: boolean;
   onStage: (index: number) => void;
   onUnstage: (index: number) => void;
+  onRevert: (index: number) => void;
 }) {
   const staged = hunks ? splitDiffIntoHunks(hunks.staged).hunks : [];
   const unstaged = hunks ? splitDiffIntoHunks(hunks.unstaged).hunks : [];
@@ -38,6 +44,9 @@ export function UnifiedView({
         actionIcon={<RiAddLine />}
         pending={pending}
         onAction={onStage}
+        secondaryLabel="Revert"
+        secondaryIcon={<RiArrowGoBackLine />}
+        onSecondary={onRevert}
       />
       <ScrollBar orientation="horizontal" />
     </ScrollArea>

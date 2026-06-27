@@ -7,9 +7,13 @@ import { langFromPath } from "@/lib/highlight";
 export function SplitView({
   patch,
   file,
+  onStageHunk,
+  onRevertHunk,
 }: {
   patch: string | null;
   file?: string;
+  onStageHunk?: (index: number) => void;
+  onRevertHunk?: (index: number) => void;
 }) {
   if (patch === null) return null;
   const parsed = parseUnifiedDiff(patch);
@@ -28,6 +32,8 @@ export function SplitView({
       oldText={collect(parsed.rows, "left")}
       newText={collect(parsed.rows, "right")}
       lang={file ? langFromPath(file) : undefined}
+      onStageHunk={onStageHunk}
+      onRevertHunk={onRevertHunk}
     />
   );
 }

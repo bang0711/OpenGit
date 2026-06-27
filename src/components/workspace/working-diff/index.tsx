@@ -6,7 +6,10 @@ import { useRouter } from "@/lib/router";
 import { useEffect, useState, useTransition } from "react";
 import {
   fileHunkDiffs,
+  revertHunk,
+  revertWorkingHunk,
   stageHunk,
+  stageWorkingHunk,
   unstageHunk,
   workingFileDiff,
 } from "@/app/actions";
@@ -53,6 +56,10 @@ export function WorkingDiff({ file }: { file: string }) {
     });
   }, [file, rev, view]);
 
+  // Event-driven refresh: refetch when the repo changes on disk (chokidar→IPC),
+  // same signal the changes sidebar uses.
+  useEffect(() => window.api.onRepoChange(() => setRev((v) => v + 1)), []);
+
   const act = (fn: () => Promise<{ error?: string }>, success: string) =>
     startTransition(async () => {
       const r = await fn();
@@ -81,13 +88,23 @@ export function WorkingDiff({ file }: { file: string }) {
       {error ? (
         <p className="text-destructive p-3 text-xs">{error}</p>
       ) : view === "split" ? (
-        <SplitView patch={patch} file={file} />
+        <SplitView
+          patch={patch}
+          file={file}
+          onStageHunk={(i) =>
+            act(() => stageWorkingHunk(file, i), "Staged hunk")
+          }
+          onRevertHunk={(i) =>
+            act(() => revertWorkingHunk(file, i), "Reverted hunk")
+          }
+        />
       ) : (
         <UnifiedView
           hunks={hunks}
           pending={pending}
           onStage={(i) => act(() => stageHunk(file, i), "Staged hunk")}
           onUnstage={(i) => act(() => unstageHunk(file, i), "Unstaged hunk")}
+          onRevert={(i) => act(() => revertHunk(file, i), "Reverted hunk")}
         />
       )}
     </div>

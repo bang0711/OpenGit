@@ -9,6 +9,9 @@ export function Section({
   actionIcon,
   pending,
   onAction,
+  secondaryLabel,
+  secondaryIcon,
+  onSecondary,
 }: {
   title: string;
   empty: string;
@@ -17,6 +20,10 @@ export function Section({
   actionIcon: React.ReactNode;
   pending: boolean;
   onAction: (index: number) => void;
+  // Optional destructive action (e.g. revert/discard a hunk).
+  secondaryLabel?: string;
+  secondaryIcon?: React.ReactNode;
+  onSecondary?: (index: number) => void;
 }) {
   return (
     <div>
@@ -33,16 +40,29 @@ export function Section({
               <span className="truncate font-mono text-[0.625rem] text-muted-foreground">
                 {hunk.split("\n")[0]}
               </span>
-              <Button
-                size="xs"
-                variant="outline"
-                className="ml-auto"
-                disabled={pending}
-                onClick={() => onAction(i)}
-              >
-                {actionIcon}
-                {actionLabel}
-              </Button>
+              <div className="ml-auto flex items-center gap-1">
+                {onSecondary ? (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={pending}
+                    onClick={() => onSecondary(i)}
+                  >
+                    {secondaryIcon}
+                    {secondaryLabel}
+                  </Button>
+                ) : null}
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => onAction(i)}
+                >
+                  {actionIcon}
+                  {actionLabel}
+                </Button>
+              </div>
             </div>
             <HunkLines hunk={hunk} />
           </div>
