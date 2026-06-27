@@ -75,24 +75,18 @@ Test-Path 'release\win-unpacked\resources\server\node_modules\next\package.json'
 
 ### Publishing a release
 
-`release/` is git-ignored — installers ship via **GitHub Releases**, not the repo.
-
-**All OSes (recommended) — CI.** `.github/workflows/release.yml` builds on `windows-latest`, `macos-latest`, and `ubuntu-latest` and publishes every installer to one GitHub Release. Bump `version` in `package.json`, commit, then push a matching tag:
+`release/` is git-ignored — installers ship via **GitHub Releases**. One command does everything:
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+# bump "version" in package.json, commit, then:
+bun run release
 ```
 
-The three jobs upload to a **draft** release — review it under **Releases** and click **Publish**. `electron-updater` reads the per-OS `latest*.yml` (also uploaded) to power in-app updates. CI builds are **unsigned** (no certs), so users get SmartScreen / Gatekeeper warnings, and macOS auto-update won't apply (the dmg still runs) until the app is signed.
+`scripts/release.mjs` tags the current commit `v<version>` and pushes it (after checking the tree is clean and the tag is new). That tag push triggers `.github/workflows/release.yml`, which builds Windows / macOS / Linux installers on their respective runners, uploads them all to a draft GitHub Release, then — once **all three** succeed — flips it to **published** automatically. (Equivalent to `git tag v<version> && git push origin v<version>` — you can do that by hand too.) If any OS build fails, the release stays a draft so users never see a partial release.
 
-**Windows only — local.** Build + sign locally, then upload with the `gh` CLI:
+`electron-updater` reads the per-OS `latest*.yml` (also uploaded) to power in-app updates. CI builds are **unsigned** (no certs), so users get SmartScreen / Gatekeeper warnings, and macOS auto-update won't apply (the dmg still runs) until the app is signed.
 
-```bash
-bun run electron:build      # release/OpenGit-Setup-<version>.exe (+ portable, signed)
-bun run release             # uploads to GitHub Release v<version>
-```
-
-`scripts/release.mjs` needs [`gh`](https://cli.github.com) installed + `gh auth login`, and the current commit pushed.
+Local builds (`bun run electron:build`) are for **testing on your own OS** — they don't publish.
 
 ## Scripts
 
@@ -103,6 +97,6 @@ bun run release             # uploads to GitHub Release v<version>
 | `build` | `next build` |
 | `electron:build` | Full packaged desktop build (host OS) |
 | `electron:publish` | Build + publish to GitHub Releases (used by CI) |
-| `release` | Upload the locally-built Windows installer via `gh` |
+| `release` | Tag `v<version>` + push → triggers the all-OS release workflow |
 | `lint` / `format` | Biome check / format |
 | `licenses` | Regenerate `THIRD-PARTY-NOTICES.txt` |

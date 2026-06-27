@@ -1,72 +1,51 @@
-// Publish the locally-built installer to a GitHub Release.
+// Cut a release: tag the current commit `v<version>` and push it. That tag push
+// triggers .github/workflows/release.yml, which builds Windows/macOS/Linux
+// installers and publishes them to a GitHub Release. No local build needed.
 //
-// We build + sign locally, so CI rebuilding would be wasteful and unsigned.
-// This just attaches the existing release/OpenGit-Setup-<version>.exe to a
-// GitHub Release tagged v<version> via the gh CLI.
-//
-// Prereqs: `gh` CLI installed and authed (`gh auth login`), and the current
-// commit pushed to origin (the tag is created from it).
-//
-// Usage: bun run release   [-- --notes "Custom notes"]
+// Usage: bump "version" in package.json, commit, then `bun run release`.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = process.cwd();
 const { version } = JSON.parse(
-  readFileSync(join(root, "package.json"), "utf8"),
+  readFileSync(join(process.cwd(), "package.json"), "utf8"),
 );
 const tag = `v${version}`;
-const exe = join(root, "release", `OpenGit-Setup-${version}.exe`);
 
-if (!existsSync(exe)) {
+const git = (args) =>
+  execFileSync("git", args, { stdio: ["ignore", "pipe", "pipe"] })
+    .toString()
+    .trim();
+
+// Tag must point at a commit that already has this version — so the tree must
+// be clean (version bump committed). Otherwise CI would build the wrong version.
+if (git(["status", "--porcelain"])) {
   console.error(
-    `Installer not found: ${exe}\nRun \`bun run electron:build\` first.`,
+    "Working tree has uncommitted changes. Commit them (including the\n" +
+      'package.json version bump) before releasing — the tag is cut from HEAD.',
   );
   process.exit(1);
 }
 
-const notesArg = process.argv.indexOf("--notes");
-const notes =
-  notesArg !== -1 ? process.argv[notesArg + 1] : `OpenGit ${tag}`;
-
-const gh = (args) =>
-  execFileSync("gh", args, { stdio: ["ignore", "pipe", "pipe"] })
-    .toString()
-    .trim();
-
-// Preflight: gh must be installed + authed. ENOENT = not on PATH.
+let tagExists = false;
 try {
-  gh(["--version"]);
-} catch (err) {
-  if (err.code === "ENOENT") {
-    console.error(
-      "gh CLI not found. Install it, then re-run:\n" +
-        "  winget install --id GitHub.cli\n" +
-        "  gh auth login\n" +
-        "Open a NEW terminal after installing so gh is on PATH.",
-    );
-  } else {
-    console.error(`gh failed: ${err.message}`);
-  }
+  git(["rev-parse", "-q", "--verify", `refs/tags/${tag}`]);
+  tagExists = true;
+} catch {}
+if (tagExists) {
+  console.error(
+    `Tag ${tag} already exists. Bump "version" in package.json and commit first.`,
+  );
   process.exit(1);
 }
 
-// Reuse the release if the tag already exists; otherwise create it.
-let exists = true;
-try {
-  gh(["release", "view", tag]);
-} catch {
-  exists = false;
-}
+console.log(`Tagging ${tag} and pushing — CI builds all OSes and publishes.`);
+git(["tag", tag]);
+git(["push", "origin", tag]);
 
-if (exists) {
-  console.log(`Release ${tag} exists — uploading installer (clobbering).`);
-  gh(["release", "upload", tag, exe, "--clobber"]);
-} else {
-  console.log(`Creating release ${tag}.`);
-  gh(["release", "create", tag, exe, "--title", `OpenGit ${tag}`, "--notes", notes]);
-}
-
-console.log(`Done. https://github.com/bang0711/OpenGit/releases/tag/${tag}`);
+console.log(`Pushed ${tag}.`);
+console.log("  Progress: https://github.com/bang0711/OpenGit/actions");
+console.log(
+  "  The release is created as a DRAFT — review and Publish it under Releases.",
+);
