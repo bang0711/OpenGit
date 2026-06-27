@@ -100,3 +100,7 @@ Local builds (`bun run electron:build`) are for **testing on your own OS** — t
 | `release` | Tag `v<version>` + push → triggers the all-OS release workflow |
 | `lint` / `format` | Biome check / format |
 | `licenses` | Regenerate `THIRD-PARTY-NOTICES.txt` |
+
+## License
+
+[MIT](./LICENSE) © Chau Chan Bang

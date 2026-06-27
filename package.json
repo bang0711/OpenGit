@@ -4,6 +4,7 @@
   "private": true,
   "description": "A git client desktop app",
   "author": "Chau Chan Bang <chau.chan.bang@pwc.com>",
+  "license": "MIT",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",

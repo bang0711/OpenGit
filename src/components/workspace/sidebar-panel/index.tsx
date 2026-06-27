@@ -3,12 +3,18 @@
 import {
   RiAddLine,
   RiCloudLine,
+  RiDownloadCloud2Line,
   RiGitBranchLine,
   RiInboxArchiveLine,
   RiPriceTag3Line,
 } from "@remixicon/react";
 import { useState } from "react";
-import { createBranch, createRemoteBranch, publishBranch } from "@/app/actions";
+import {
+  createBranch,
+  createRemoteBranch,
+  fetchTags,
+  publishBranch,
+} from "@/app/actions";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { NameDialog } from "@/components/name-dialog";
 import { Button } from "@/components/ui/button";
@@ -65,6 +71,15 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
         ),
       )
       .finally(() => setPublishing(false));
+  };
+
+  const [fetchingTags, setFetchingTags] = useState(false);
+  const onFetchTags = () => {
+    if (fetchingTags) return;
+    setFetchingTags(true);
+    fetchTags()
+      .then((r) => notify(r, "Fetched tags"))
+      .finally(() => setFetchingTags(false));
   };
 
   // Group remote branches under their remote name.
@@ -167,7 +182,25 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
             })}
           </Section>
 
-          <Section icon={<RiPriceTag3Line />} label="Tags" count={tags.length}>
+          <Section
+            icon={<RiPriceTag3Line />}
+            label="Tags"
+            count={tags.length}
+            action={
+              remoteNames.length > 0 ? (
+                <ActionTooltip label="Fetch tags from remote">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={fetchingTags}
+                    onClick={onFetchTags}
+                  >
+                    <RiDownloadCloud2Line />
+                  </Button>
+                </ActionTooltip>
+              ) : null
+            }
+          >
             {tags.map((t) => (
               <TagRow key={t.name} tag={t} />
             ))}

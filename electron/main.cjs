@@ -11,7 +11,7 @@
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { spawn } = require("node:child_process");
-const { createWriteStream, existsSync } = require("node:fs");
+const { createWriteStream, existsSync, statSync } = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 
@@ -24,12 +24,27 @@ const ICON = path.join(__dirname, "..", "build", "icon.ico");
 let serverProc = null;
 let logStream = null;
 
+// Keep the diagnostic log small so it never bloats the user's disk. 5 MB is far
+// more than enough for the few lines we write per launch; older entries are
+// dropped (truncate, start fresh) once the file grows past this.
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
+
 // GUI apps have no console, so write diagnostics to a file under userData
 // (%APPDATA%/opengit/main.log on Windows). Check this if the app misbehaves.
 function log(...args) {
   const line = `[${new Date().toISOString()}] ${args.join(" ")}\n`;
   try {
-    if (!logStream) logStream = createWriteStream(path.join(app.getPath("userData"), "main.log"), { flags: "a" });
+    if (!logStream) {
+      const logPath = path.join(app.getPath("userData"), "main.log");
+      // Append unless the existing file is over the cap — then truncate it.
+      let flags = "a";
+      try {
+        if (existsSync(logPath) && statSync(logPath).size > MAX_LOG_BYTES) {
+          flags = "w";
+        }
+      } catch {}
+      logStream = createWriteStream(logPath, { flags });
+    }
     logStream.write(line);
   } catch {}
   process.stdout.write(line);
@@ -89,6 +104,33 @@ function startProdServer(port) {
   serverProc.stderr.on("data", (d) => log("[server:err]", d.toString().trim()));
   serverProc.on("error", (e) => log("server spawn error:", e.message));
   serverProc.on("exit", (code) => log("server exited with code", code));
+}
+
+// Shown instantly while the Next server boots, so the window is never a blank
+// rectangle during the (multi-second) cold start. The bar advances at the real
+// startup milestones (Next gives no finer progress signal); main drives it via
+// window.__p(percent). Returns a promise that resolves when the splash is shown.
+function showSplash(win) {
+  // Plain HTML/CSS styled to match shadcn's Progress (rounded-full track +
+  // primary indicator) — it can't be the React component, since this renders
+  // before the app/React exists. Colors match the default (GitKraken) theme.
+  const html = `<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:flex;flex-direction:column;gap:20px;align-items:center;justify-content:center;background:#1b2b34;color:#e6edf3;font-family:system-ui,sans-serif">
+    <div style="font-size:14px;font-weight:600;letter-spacing:.01em">OpenGit</div>
+    <div style="position:relative;width:220px;height:8px;background:rgba(26,188,156,0.2);border-radius:9999px;overflow:hidden">
+      <div id="bar" style="position:absolute;inset:0;width:8%;background:#1abc9c;border-radius:9999px;transition:width .5s ease"></div>
+    </div>
+    <div style="font-size:12px;color:#8aa1ad">Starting…</div>
+    <script>window.__p=function(p){var b=document.getElementById('bar');if(b)b.style.width=p+'%'}</script>
+  </body>`;
+  return win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
+// Move the splash progress bar (best-effort; ignored once the app has loaded).
+function setSplashProgress(win, pct) {
+  if (win.isDestroyed()) return;
+  win.webContents
+    .executeJavaScript(`window.__p && window.__p(${pct})`)
+    .catch(() => {});
 }
 
 function showError(win, message) {
@@ -162,7 +204,9 @@ function wireUpdater() {
   );
 
   // Quiet check on launch so the UI can show an "update available" indicator.
-  autoUpdater.checkForUpdates().catch((e) => log("launch update check:", e.message));
+  // Swallow errors silently — a missing latest.yml (e.g. the latest published
+  // release predates auto-update) is benign and shouldn't spam the log.
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 async function createWindow() {
@@ -192,11 +236,17 @@ async function createWindow() {
     loadWithRetry(win, DEV_URL);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
+    // Instant feedback while the server cold-starts; bar advances at each
+    // real milestone (Next exposes no finer progress).
+    await showSplash(win);
     try {
+      setSplashProgress(win, 20);
       const port = await freePort();
-      startProdServer(port);
-      await waitForPort(port);
-      await win.loadURL(`http://127.0.0.1:${port}`);
+      startProdServer(port); // server process spawned
+      setSplashProgress(win, 45);
+      await waitForPort(port); // server is listening / ready
+      setSplashProgress(win, 80);
+      await win.loadURL(`http://127.0.0.1:${port}`); // app loaded → replaces splash
       log("loaded app on port", port);
     } catch (e) {
       log("failed to start:", e.message);

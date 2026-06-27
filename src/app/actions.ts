@@ -365,6 +365,11 @@ export async function deleteRemoteTag(name: string): Promise<ActionState> {
   return gitAction(["push", "origin", `:refs/tags/${name}`]);
 }
 
+/** Fetch remote tags into local refs so they show up in the tag list. */
+export async function fetchTags(): Promise<ActionState> {
+  return gitAction(["fetch", "origin", "--tags"]);
+}
+
 // ── Conflict resolution ─────────────────────────────────────────────────────
 
 /** Run arbitrary repo work under the repo lock, then revalidate every route. */
