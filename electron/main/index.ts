@@ -1,6 +1,7 @@
 import { createWriteStream, existsSync, statSync, type WriteStream } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, shell } from "electron";
+import { wireGithub } from "./github";
 import { registerIpc } from "./ipc";
 import { wireUpdater } from "./updater";
 import { initWatch } from "./watch";
@@ -79,6 +80,7 @@ app.whenReady().then(() => {
   const win = createWindow();
   initWatch(win);
   wireUpdater(isDev, log);
+  wireGithub(log);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

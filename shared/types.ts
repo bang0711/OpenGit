@@ -231,3 +231,104 @@ export interface Updater {
   /** Download a release's installer and launch it (progress via onEvent). */
   downloadVersion(url: string): Promise<void>;
 }
+
+// ── GitHub (PR management) ───────────────────────────────────────────────────
+export type GhUser = { login: string; avatarUrl: string };
+export type GhStatus =
+  | { connected: false; reason?: string }
+  | { connected: true; login: string; avatarUrl: string };
+
+export type MergeMethod = "merge" | "squash" | "rebase";
+export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+
+export type PullRequest = {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  draft: boolean;
+  merged: boolean;
+  author: GhUser | null;
+  base: string; // base branch
+  head: string; // head branch
+  comments: number;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+};
+
+export type PrFile = {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+};
+export type PrComment = {
+  id: number;
+  author: GhUser | null;
+  body: string;
+  createdAt: string;
+};
+export type PrReview = {
+  id: number;
+  author: GhUser | null;
+  state: string; // APPROVED | CHANGES_REQUESTED | COMMENTED | …
+  body: string;
+  submittedAt: string | null;
+};
+export type PrCheck = {
+  name: string;
+  status: string; // queued | in_progress | completed
+  conclusion: string | null; // success | failure | neutral | …
+};
+export type PullRequestDetail = PullRequest & {
+  body: string;
+  mergeable: boolean | null;
+  files: PrFile[];
+  comments_list: PrComment[];
+  reviews: PrReview[];
+  checks: PrCheck[];
+};
+
+export type Collaborator = {
+  login: string;
+  avatarUrl: string;
+  role: string;
+  url: string;
+};
+export type GithubIssue = {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  author: GhUser | null;
+  comments: number;
+  createdAt: string;
+  url: string;
+};
+export type GithubBranch = {
+  name: string;
+  sha: string;
+  protected: boolean;
+};
+
+/** The IPC surface exposed on window.github. Each call may return { error }. */
+export interface Github {
+  tokenStatus(): Promise<GhStatus>;
+  setToken(token: string): Promise<GhStatus>;
+  clearToken(): Promise<void>;
+  listPRs(): Promise<PullRequest[] | Err>;
+  getPR(number: number): Promise<PullRequestDetail | Err>;
+  mergePR(number: number, method: MergeMethod): Promise<ActionState>;
+  closePR(number: number): Promise<ActionState>;
+  commentPR(number: number, body: string): Promise<ActionState>;
+  reviewPR(number: number, event: ReviewEvent, body?: string): Promise<ActionState>;
+  createPR(
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+    reviewers: string[],
+  ): Promise<ActionState>;
+  listCollaborators(): Promise<Collaborator[] | Err>;
+  listIssues(): Promise<GithubIssue[] | Err>;
+  listRemoteBranches(): Promise<GithubBranch[] | Err>;
+}
