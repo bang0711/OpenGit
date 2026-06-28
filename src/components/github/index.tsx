@@ -7,6 +7,7 @@ import {
   RiGitBranchLine,
   RiGithubFill,
   RiGitPullRequestLine,
+  RiLoader4Line,
   RiLogoutBoxRLine,
   RiRefreshLine,
   RiTeamLine,
@@ -18,8 +19,7 @@ import type {
   GithubIssue,
   PullRequest,
 } from "@shared/types";
-import { useEffect, useState } from "react";
-import { useLoaderData, useRevalidator } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,13 +49,14 @@ import { Branches, Collaborators, Issues } from "./lists";
 import { PrDetail } from "./pr-detail";
 import { PrList } from "./pr-list";
 
-type LoaderData = {
-  status: GhStatus;
+type Lists = {
   prs: PullRequest[];
   collaborators: Collaborator[];
   issues: GithubIssue[];
   branches: GithubBranch[];
 };
+const EMPTY: Lists = { prs: [], collaborators: [], issues: [], branches: [] };
+const arr = <T,>(x: T[] | { error: string }): T[] => (Array.isArray(x) ? x : []);
 
 type Section = "prs" | "issues" | "collab" | "branches";
 const POLL_MS = 15000;
@@ -68,37 +69,68 @@ const SECTION_LABEL: Record<Section, string> = {
 };
 
 export function GithubPanel() {
-  const data = useLoaderData() as LoaderData;
-  const { revalidate } = useRevalidator();
+  const [status, setStatus] = useState<GhStatus | null>(null);
+  const [data, setData] = useState<Lists>(EMPTY);
   const [section, setSection] = useState<Section>("prs");
   const [selectedPr, setSelectedPr] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Real-time: poll on an interval + refetch when the window regains focus.
+  // Fetch in the component (not a route loader) so navigation is instant.
+  const load = useCallback(async () => {
+    const s = await window.github.tokenStatus();
+    setStatus(s);
+    if (!s.connected) {
+      setData(EMPTY);
+      return;
+    }
+    const [prs, collaborators, issues, branches] = await Promise.all([
+      window.github.listPRs(),
+      window.github.listCollaborators(),
+      window.github.listIssues(),
+      window.github.listRemoteBranches(),
+    ]);
+    setData({
+      prs: arr(prs),
+      collaborators: arr(collaborators),
+      issues: arr(issues),
+      branches: arr(branches),
+    });
+  }, []);
+
+  // Initial load + real-time poll + refetch on window focus.
   useEffect(() => {
-    const id = setInterval(() => revalidate(), POLL_MS);
-    const onFocus = () => revalidate();
+    load();
+    const id = setInterval(load, POLL_MS);
+    const onFocus = () => load();
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(id);
       window.removeEventListener("focus", onFocus);
     };
-  }, [revalidate]);
+  }, [load]);
 
   const disconnect = async () => {
     await window.github.clearToken();
     setSelectedPr(null);
-    revalidate();
+    load();
   };
 
-  if (!data.status.connected) {
+  if (status === null) {
     return (
-      <div className="bg-background h-screen">
-        <ConnectForm reason={data.status.reason} onConnected={revalidate} />
+      <div className="bg-background text-muted-foreground flex h-screen items-center justify-center">
+        <RiLoader4Line className="size-6 animate-spin" />
       </div>
     );
   }
-  const account = data.status;
+
+  if (!status.connected) {
+    return (
+      <div className="bg-background h-screen">
+        <ConnectForm reason={status.reason} onConnected={load} />
+      </div>
+    );
+  }
+  const account = status;
 
   const openCount = data.prs.filter((p) => p.state === "open").length;
   const nav: { key: Section; icon: React.ReactNode; count: number }[] = [
@@ -175,7 +207,7 @@ export function GithubPanel() {
           </span>
           <div className="ml-auto flex items-center gap-2">
             <ActionTooltip label="Refresh">
-              <Button variant="ghost" size="icon" onClick={revalidate}>
+              <Button variant="ghost" size="icon" onClick={load}>
                 <RiRefreshLine />
               </Button>
             </ActionTooltip>
@@ -205,7 +237,7 @@ export function GithubPanel() {
                   <PrDetail
                     number={selectedPr}
                     onBack={() => setSelectedPr(null)}
-                    onChanged={revalidate}
+                    onChanged={load}
                   />
                 ) : (
                   <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3">
@@ -236,7 +268,7 @@ export function GithubPanel() {
         onOpenChange={setCreating}
         branches={data.branches}
         collaborators={data.collaborators}
-        onCreated={revalidate}
+        onCreated={load}
       />
     </SidebarProvider>
   );
