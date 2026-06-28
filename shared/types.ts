@@ -143,7 +143,11 @@ export interface Api {
   listDirectory(path?: string): Promise<DirListing>;
   recentRepos(): Promise<string[]>;
   openRepo(path: string): Promise<ActionState>;
-  cloneRepo(url: string, directory: string): Promise<ActionState>;
+  cloneRepo(
+    url: string,
+    directory: string,
+    token?: string,
+  ): Promise<ActionState>;
   closeRepo(): Promise<ActionState>;
   workspace(): Promise<WorkspaceData | Err>;
   commitDetail(sha: string): Promise<CommitDetail | Err>;

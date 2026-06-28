@@ -101,9 +101,25 @@ async function mutate(
 // ── Repo open / close / browse ──────────────────────────────────────────────
 const repoAt = (p: string) => existsSync(join(p, ".git"));
 
+// Sentinel "directory" representing the list of Windows drives (This PC).
+const DRIVES = "::drives";
+
+function listDrives(): DirListing {
+  const entries: DirEntry[] = [];
+  for (let c = 65; c <= 90; c++) {
+    const root = `${String.fromCharCode(c)}:\\`;
+    if (existsSync(root))
+      entries.push({ name: root, path: root, isRepo: repoAt(root) });
+  }
+  return { path: "This PC", parent: null, isRepo: false, entries };
+}
+
 export async function listDirectory(path?: string): Promise<DirListing> {
+  if (path === DRIVES) return listDrives();
   const target = path && isAbsolute(path) ? path : homedir();
   const parent = dirname(target);
+  const driveRoot = process.platform === "win32" && /^[a-zA-Z]:\\$/.test(target);
+  const up = driveRoot ? DRIVES : parent === target ? null : parent;
   try {
     const dirents = await readdir(target, { withFileTypes: true });
     const entries: DirEntry[] = dirents
@@ -115,14 +131,14 @@ export async function listDirectory(path?: string): Promise<DirListing> {
       .sort((a, b) => a.name.localeCompare(b.name));
     return {
       path: target,
-      parent: parent === target ? null : parent,
+      parent: up,
       isRepo: repoAt(target),
       entries,
     };
   } catch {
     return {
       path: target,
-      parent: parent === target ? null : parent,
+      parent: up,
       isRepo: false,
       entries: [],
       error: "Cannot read this directory.",
@@ -154,6 +170,7 @@ export async function openRepo(path: string): Promise<ActionState> {
 export async function cloneRepo(
   url: string,
   directory: string,
+  token?: string,
 ): Promise<ActionState> {
   const u = url.trim();
   const parent = directory.trim();
@@ -168,9 +185,22 @@ export async function cloneRepo(
       .split(/[/:]/)
       .pop() || "repo";
   const target = join(parent, name);
+  // For private HTTPS repos: pass the token via an ephemeral -c http.extraHeader
+  // (Basic auth). Not written to .git/config and not embedded in the remote URL.
+  const auth = token?.trim();
+  const cfg = auth
+    ? [
+        "-c",
+        `http.extraHeader=Authorization: Basic ${Buffer.from(
+          `x-access-token:${auth}`,
+        ).toString("base64")}`,
+      ]
+    : [];
   try {
     await mkdir(parent, { recursive: true });
-    await runGit(parent, ["clone", u, target]);
+    await runGit(parent, [...cfg, "clone", u, target], {
+      env: { GIT_TERMINAL_PROMPT: "0" },
+    });
     const repoId = await registerRepo(target);
     setActiveRepo(repoId, target);
     return {};

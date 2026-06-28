@@ -57,11 +57,13 @@ export function FolderPicker({
 
   const canSelect = mode === "dir" || (listing?.isRepo ?? false);
 
+  const pick = (path: string) => {
+    onPick(path);
+    setOpen(false);
+  };
+
   const select = () => {
-    if (listing && canSelect) {
-      onPick(listing.path);
-      setOpen(false);
-    }
+    if (listing && canSelect) pick(listing.path);
   };
 
   return (
@@ -118,7 +120,11 @@ export function FolderPicker({
                 <button
                   key={entry.path}
                   type="button"
-                  onClick={() => navigate(entry.path)}
+                  onClick={() =>
+                    mode === "repo" && entry.isRepo
+                      ? pick(entry.path)
+                      : navigate(entry.path)
+                  }
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
                   )}
@@ -148,9 +154,11 @@ export function FolderPicker({
                 : "Open a folder that contains a .git directory."
               : "Pick where the repository will be cloned."}
           </p>
-          <Button disabled={pending || !canSelect} onClick={select}>
-            {mode === "repo" ? "Open repository" : "Select folder"}
-          </Button>
+          {mode === "dir" ? (
+            <Button disabled={pending || !canSelect} onClick={select}>
+              Select folder
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

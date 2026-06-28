@@ -26,6 +26,7 @@ export function RepoPicker({ recent }: { recent: string[] }) {
   const [path, setPath] = useState("");
   const [url, setUrl] = useState("");
   const [directory, setDirectory] = useState("");
+  const [token, setToken] = useState("");
   const [opening, setOpening] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [openError, setOpenError] = useState<string>();
@@ -45,7 +46,7 @@ export function RepoPicker({ recent }: { recent: string[] }) {
     if (cloning) return;
     setCloning(true);
     setCloneError(undefined);
-    const r = await cloneRepo(url, directory);
+    const r = await cloneRepo(url, directory, token);
     setCloning(false);
     if (r.error) setCloneError(r.error);
     else router.push("/");
@@ -160,6 +161,23 @@ export function RepoPicker({ recent }: { recent: string[] }) {
                     </FolderPicker>
                   </div>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="clone-token">
+                    Access token{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (private repos only)
+                    </span>
+                  </Label>
+                  <Input
+                    id="clone-token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="Personal access token"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
                 {cloneError ? (
                   <p className="text-destructive text-xs">{cloneError}</p>
                 ) : null}
@@ -185,17 +203,25 @@ export function RepoPicker({ recent }: { recent: string[] }) {
                 Recent
               </p>
               <div className="flex flex-col gap-1">
-                {recent.map((recentPath) => (
-                  <button
-                    key={recentPath}
-                    type="button"
-                    onClick={() => doOpen(recentPath)}
-                    className="text-muted-foreground hover:bg-muted hover:text-foreground flex w-full items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-xs transition-colors"
-                  >
-                    <RiGitRepositoryLine className="size-3.5 shrink-0" />
-                    <span className="truncate">{recentPath}</span>
-                  </button>
-                ))}
+                {recent.map((recentPath) => {
+                  const parts = recentPath.split(/[/\\]/).filter(Boolean);
+                  const name = parts.at(-1) ?? recentPath;
+                  const location = parts.slice(0, -1).join("/") || recentPath;
+                  return (
+                    <button
+                      key={recentPath}
+                      type="button"
+                      onClick={() => doOpen(recentPath)}
+                      className="text-muted-foreground hover:bg-muted hover:text-foreground flex w-full min-w-0 items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors"
+                    >
+                      <RiGitRepositoryLine className="size-3.5 shrink-0 self-center" />
+                      <span className="text-foreground shrink-0 font-medium">
+                        {name}
+                      </span>
+                      <span className="truncate text-[0.7rem]">{location}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
