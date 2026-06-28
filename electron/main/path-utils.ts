@@ -11,6 +11,15 @@ export function cloneAuthArgs(token?: string): string[] {
   return ["-c", `http.extraHeader=Authorization: Basic ${basic}`];
 }
 
+/** Parse owner/repo from a GitHub remote URL. Returns null for non-GitHub. */
+export function parseGithubRemote(
+  url: string,
+): { owner: string; repo: string } | null {
+  const m = /github\.com[/:]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(url.trim());
+  if (!m) return null;
+  return { owner: m[1], repo: m[2] };
+}
+
 /**
  * True when `path` is a Windows drive root like `C:\`. Used to decide that
  * "up one level" should show the list of drives (This PC) rather than nothing.

@@ -28,5 +28,33 @@ const updater = {
   },
 };
 
+const github = {
+  tokenStatus: () => ipcRenderer.invoke("gh:tokenStatus"),
+  setToken: (token: string) => ipcRenderer.invoke("gh:setToken", token),
+  clearToken: () => ipcRenderer.invoke("gh:clearToken"),
+  repoContext: () => ipcRenderer.invoke("gh:repoContext"),
+  invalidate: () => ipcRenderer.invoke("gh:invalidate"),
+  listPRs: () => ipcRenderer.invoke("gh:listPRs"),
+  getPR: (n: number) => ipcRenderer.invoke("gh:getPR", n),
+  mergePR: (n: number, method: string) =>
+    ipcRenderer.invoke("gh:mergePR", n, method),
+  closePR: (n: number) => ipcRenderer.invoke("gh:closePR", n),
+  commentPR: (n: number, body: string) =>
+    ipcRenderer.invoke("gh:commentPR", n, body),
+  reviewPR: (n: number, event: string, body?: string) =>
+    ipcRenderer.invoke("gh:reviewPR", n, event, body),
+  createPR: (
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+    reviewers: string[],
+  ) => ipcRenderer.invoke("gh:createPR", title, body, head, base, reviewers),
+  listCollaborators: () => ipcRenderer.invoke("gh:listCollaborators"),
+  listIssues: () => ipcRenderer.invoke("gh:listIssues"),
+  listRemoteBranches: () => ipcRenderer.invoke("gh:listRemoteBranches"),
+};
+
 contextBridge.exposeInMainWorld("api", api);
 contextBridge.exposeInMainWorld("updater", updater);
+contextBridge.exposeInMainWorld("github", github);

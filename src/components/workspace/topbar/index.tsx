@@ -6,6 +6,7 @@ import {
   RiCloseLine,
   RiDownloadCloud2Line,
   RiGitBranchLine,
+  RiGitPullRequestLine,
 } from "@remixicon/react";
 import { useTransition } from "react";
 import {
@@ -18,7 +19,9 @@ import {
   gitPushSetUpstream,
   mergeBranch,
 } from "@/app/actions";
+import { ActionTooltip } from "@/components/action-tooltip";
 import { GitLogo } from "@/components/git-logo";
+import Link from "@/lib/link";
 import { useRouter } from "@/lib/router";
 import { UpdateChecker } from "@/components/update-checker";
 import { Button } from "@/components/ui/button";
@@ -123,6 +126,15 @@ export function Topbar({ repo, current, branches }: Props) {
         />
 
         <Separator orientation="vertical" className="mx-1 !h-5" />
+
+        <ActionTooltip label="Pull requests, issues & collaborators">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/github">
+              <RiGitPullRequestLine />
+              Pull Requests
+            </Link>
+          </Button>
+        </ActionTooltip>
 
         <UpdateChecker />
 

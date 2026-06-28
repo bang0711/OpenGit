@@ -275,3 +275,59 @@ body,
     cursor: pointer;
   }
 }
+
+/* Dracula syntax highlighting (Prism tokens). Used by the diff views and the
+   GitHub settings code block. Replaces the prism-tomorrow theme. */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6272a4;
+}
+.token.punctuation {
+  color: #f8f8f2;
+}
+.token.namespace {
+  opacity: 0.7;
+}
+.token.property,
+.token.constant,
+.token.symbol,
+.token.boolean,
+.token.number {
+  color: #bd93f9;
+}
+.token.tag,
+.token.keyword,
+.token.operator,
+.token.deleted {
+  color: #ff79c6;
+}
+.token.selector,
+.token.string,
+.token.char,
+.token.attr-value,
+.token.inserted {
+  color: #f1fa8c;
+}
+.token.function,
+.token.class-name {
+  color: #50fa7b;
+}
+.token.builtin,
+.token.attr-name,
+.token.variable {
+  color: #8be9fd;
+}
+.token.regex,
+.token.important,
+.token.url {
+  color: #ffb86c;
+}
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+.token.italic {
+  font-style: italic;
+}
