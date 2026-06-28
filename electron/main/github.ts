@@ -328,6 +328,10 @@ export function wireGithub(log: (...a: unknown[]) => void): void {
   ipcMain.handle("gh:setToken", (_e, token: string) => setToken(token));
   ipcMain.handle("gh:clearToken", () => clearGithubToken());
   ipcMain.handle("gh:repoContext", () => repoContext());
+  // Drop ETag cache so the next reads force fresh 200s (manual Refresh).
+  ipcMain.handle("gh:invalidate", () => {
+    etagCache.clear();
+  });
 
   // Reads return data or { error }; actions return {} or { error }.
   const read = <T>(fn: () => Promise<T>) =>

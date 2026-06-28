@@ -317,6 +317,8 @@ export interface Github {
   setToken(token: string): Promise<GhStatus>;
   clearToken(): Promise<void>;
   repoContext(): Promise<{ owner: string; repo: string } | null>;
+  /** Drop the ETag cache so the next reads force fresh data (manual refresh). */
+  invalidate(): Promise<void>;
   listPRs(): Promise<PullRequest[] | Err>;
   getPR(number: number): Promise<PullRequestDetail | Err>;
   mergePR(number: number, method: MergeMethod): Promise<ActionState>;

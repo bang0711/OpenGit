@@ -122,12 +122,21 @@ export function GithubPanel() {
     window.github.repoContext().then((c) => setRepo(c ? `${c.owner}/${c.repo}` : ""));
   }, []);
 
-  // Push-based real-time: refetch lists + open PR whenever the relay forwards a
-  // webhook event for this repo.
-  const rtStatus = useRealtime(relayUrl, repo, () => {
+  // Reload lists + open PR detail (the detail reloads when refreshKey changes).
+  const reload = () => {
     load();
     setRefreshKey((k) => k + 1);
-  });
+  };
+
+  // Manual Refresh: drop the ETag cache first so everything pulls fresh 200s.
+  const refresh = async () => {
+    await window.github.invalidate();
+    reload();
+  };
+
+  // Push-based real-time: refetch lists + open PR whenever the relay forwards a
+  // webhook event for this repo (ETag-cached, cheap).
+  const rtStatus = useRealtime(relayUrl, repo, reload);
 
   const disconnect = async () => {
     await window.github.clearToken();
@@ -256,7 +265,7 @@ export function GithubPanel() {
               </button>
             </ActionTooltip>
             <ActionTooltip label="Refresh">
-              <Button variant="ghost" size="icon" onClick={load}>
+              <Button variant="ghost" size="icon" onClick={refresh}>
                 <RiRefreshLine />
               </Button>
             </ActionTooltip>
