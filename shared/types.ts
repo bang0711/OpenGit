@@ -142,6 +142,8 @@ type Err = { error: string };
 export interface Api {
   listDirectory(path?: string): Promise<DirListing>;
   recentRepos(): Promise<string[]>;
+  removeRecent(path: string): Promise<ActionState>;
+  clearRecent(): Promise<ActionState>;
   openRepo(path: string): Promise<ActionState>;
   cloneRepo(
     url: string,
@@ -311,14 +313,33 @@ export type GithubBranch = {
   protected: boolean;
 };
 
+export type GhRepo = {
+  fullName: string; // owner/repo
+  name: string;
+  owner: string;
+  private: boolean;
+  cloneUrl: string; // https clone URL
+  description: string;
+  updatedAt: string;
+};
+
 /** The IPC surface exposed on window.github. Each call may return { error }. */
 export interface Github {
   tokenStatus(): Promise<GhStatus>;
   setToken(token: string): Promise<GhStatus>;
   clearToken(): Promise<void>;
+  /** Begin GitHub OAuth Device Flow: opens the verify page, polls in background. */
+  deviceStart(): Promise<
+    | { userCode: string; verificationUri: string; expiresIn: number }
+    | { error: string }
+  >;
+  /** Fires when device-flow login completes (success or failure). */
+  onAuth(cb: (status: GhStatus) => void): () => void;
   repoContext(): Promise<{ owner: string; repo: string } | null>;
   /** Drop the ETag cache so the next reads force fresh data (manual refresh). */
   invalidate(): Promise<void>;
+  /** The signed-in user's repositories (owner/collaborator/org), for cloning. */
+  listMyRepos(): Promise<GhRepo[] | { error: string }>;
   listPRs(): Promise<PullRequest[] | Err>;
   getPR(number: number): Promise<PullRequestDetail | Err>;
   mergePR(number: number, method: MergeMethod): Promise<ActionState>;

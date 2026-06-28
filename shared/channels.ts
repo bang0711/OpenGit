@@ -4,6 +4,8 @@
 export const API_CHANNELS = [
   "listDirectory",
   "recentRepos",
+  "removeRecent",
+  "clearRecent",
   "openRepo",
   "cloneRepo",
   "closeRepo",

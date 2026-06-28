@@ -6,6 +6,7 @@ import {
   RiLoader4Line,
 } from "@remixicon/react";
 import type { PrCheck, PullRequest } from "@shared/types";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export type PrState = "open" | "merged" | "closed";
@@ -41,16 +42,10 @@ export function StateBadge({
 }) {
   const s = prState(pr);
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] font-semibold",
-        STATE[s].bg,
-        STATE[s].fg,
-      )}
-    >
+    <Badge className={cn("gap-1 font-semibold", STATE[s].bg, STATE[s].fg)}>
       <PrIcon pr={pr} className="size-3" />
       {STATE[s].label}
-    </span>
+    </Badge>
   );
 }
 

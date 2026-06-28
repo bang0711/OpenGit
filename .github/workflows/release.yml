@@ -39,6 +39,10 @@ jobs:
       - name: Build & publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub OAuth App client id baked into the binary at build time
+          # (public — device flow has no secret). Set this repo/org Actions
+          # variable so released installers ship with one-click login enabled.
+          OPENGIT_GH_CLIENT_ID: ${{ vars.OPENGIT_GH_CLIENT_ID }}
           # No code-signing certs on CI — skip macOS signing so the dmg builds.
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: bun run electron:publish

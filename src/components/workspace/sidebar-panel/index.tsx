@@ -16,6 +16,7 @@ import {
   publishBranch,
 } from "@/app/actions";
 import { ActionTooltip } from "@/components/action-tooltip";
+import { GithubAccount } from "@/components/github-account";
 import { NameDialog } from "@/components/name-dialog";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
@@ -217,6 +218,10 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
           </Section>
         </div>
       </ScrollArea>
+
+      <div className="border-border shrink-0 border-t p-2">
+        <GithubAccount />
+      </div>
 
       <NameDialog
         open={newBranchOpen}

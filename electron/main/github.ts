@@ -1,23 +1,119 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain, shell } from "electron";
 import type {
   ActionState,
   Collaborator,
+  GhRepo,
   GhStatus,
   GithubBranch,
   GithubIssue,
-  GhUser,
   MergeMethod,
   PullRequest,
   PullRequestDetail,
   ReviewEvent,
 } from "@shared/types";
 import { getRemotes } from "./git";
+import {
+  collabRole,
+  isRealIssue,
+  mapPr,
+  mapUser,
+  type RawPr,
+  type RawUser,
+} from "./github-map";
 import { parseGithubRemote } from "./path-utils";
 import { resolveRepoPath } from "./repo-registry";
 import { clearGithubToken, getGithubToken, setGithubToken } from "./secrets";
 import { getActiveRepoId } from "./state";
 
 const API = "https://api.github.com";
+
+// GitHub OAuth App client ID for the Device Flow. Like GitKraken, OpenGit ships
+// its OWN OAuth App so end users get one-click login with zero setup. The id is
+// PUBLIC (device flow has no secret) — it's baked into the binary at build time
+// from OPENGIT_GH_CLIENT_ID (see electron.vite.config.ts) so it stays out of the
+// source. process.env is a runtime fallback for `electron-vite dev`.
+declare const __GH_CLIENT_ID__: string;
+const CLIENT_ID =
+  (typeof __GH_CLIENT_ID__ !== "undefined" ? __GH_CLIENT_ID__ : "") ||
+  process.env.OPENGIT_GH_CLIENT_ID?.trim() ||
+  "";
+const OAUTH_SCOPE = "repo read:org";
+
+function emitAuth(payload: unknown): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send("gh:auth", payload);
+  }
+}
+
+// Poll GitHub for the device-flow token until the user authorizes (or it
+// expires), then store it and notify the renderer.
+async function pollDeviceToken(deviceCode: string, interval: number): Promise<void> {
+  let wait = Math.max(interval, 5) * 1000;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, wait));
+    const res = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: CLIENT_ID,
+        device_code: deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      }),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      access_token?: string;
+      error?: string;
+      interval?: number;
+    } | null;
+    if (data?.access_token) {
+      setGithubToken(data.access_token);
+      emitAuth(await status());
+      return;
+    }
+    if (data?.error === "authorization_pending") continue;
+    if (data?.error === "slow_down") {
+      wait += 5000;
+      continue;
+    }
+    // expired_token, access_denied, etc.
+    emitAuth({ connected: false, reason: data?.error ?? "Login failed." });
+    return;
+  }
+}
+
+// Start the OAuth Device Flow: get a user code, open the verification page, and
+// begin polling in the background. Resolves with the code to show the user.
+async function deviceStart(): Promise<
+  { userCode: string; verificationUri: string; expiresIn: number } | ActionState
+> {
+  if (!CLIENT_ID)
+    return {
+      error:
+        "GitHub login isn't configured. Set OPENGIT_GH_CLIENT_ID to your OAuth App's client id, or sign in with a token.",
+    };
+  const res = await fetch("https://github.com/login/device/code", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: CLIENT_ID, scope: OAUTH_SCOPE }),
+  });
+  const data = (await res.json().catch(() => null)) as {
+    device_code?: string;
+    user_code?: string;
+    verification_uri?: string;
+    expires_in?: number;
+    interval?: number;
+    error?: string;
+  } | null;
+  if (!data?.device_code || !data.user_code || !data.verification_uri)
+    return { error: data?.error || "Could not start GitHub login." };
+  void shell.openExternal(data.verification_uri);
+  void pollDeviceToken(data.device_code, data.interval ?? 5);
+  return {
+    userCode: data.user_code,
+    verificationUri: data.verification_uri,
+    expiresIn: data.expires_in ?? 900,
+  };
+}
 
 async function ghContext(): Promise<{ owner: string; repo: string }> {
   const id = getActiveRepoId();
@@ -65,43 +161,8 @@ async function ghFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-// ── mappers ──────────────────────────────────────────────────────────────────
-type RawUser = { login: string; avatar_url: string } | null;
-const user = (u: RawUser): GhUser | null =>
-  u ? { login: u.login, avatarUrl: u.avatar_url } : null;
-
-type RawPr = {
-  number: number;
-  title: string;
-  state: string;
-  draft?: boolean;
-  merged?: boolean;
-  merged_at?: string | null;
-  user: RawUser;
-  base: { ref: string };
-  head: { ref: string; sha: string };
-  comments?: number;
-  created_at: string;
-  updated_at: string;
-  html_url: string;
-  body?: string | null;
-  mergeable?: boolean | null;
-};
-
-const mapPr = (p: RawPr): PullRequest => ({
-  number: p.number,
-  title: p.title,
-  state: p.state === "closed" ? "closed" : "open",
-  draft: !!p.draft,
-  merged: !!p.merged || !!p.merged_at,
-  author: user(p.user),
-  base: p.base.ref,
-  head: p.head.ref,
-  comments: p.comments ?? 0,
-  createdAt: p.created_at,
-  updatedAt: p.updated_at,
-  url: p.html_url,
-});
+// Pure response mappers live in ./github-map (unit-tested).
+const user = mapUser;
 
 // ── operations ───────────────────────────────────────────────────────────────
 async function status(): Promise<GhStatus> {
@@ -261,17 +322,10 @@ async function listCollaborators(): Promise<Collaborator[]> {
   const raw = await ghFetch<
     Array<{ login: string; avatar_url: string; html_url: string; role_name?: string; permissions?: Record<string, boolean> }>
   >(`/repos/${owner}/${repo}/collaborators?per_page=100`);
-  const role = (c: { role_name?: string; permissions?: Record<string, boolean> }) =>
-    c.role_name ||
-    (c.permissions?.admin
-      ? "admin"
-      : c.permissions?.push
-        ? "write"
-        : "read");
   return raw.map((c) => ({
     login: c.login,
     avatarUrl: c.avatar_url,
-    role: role(c),
+    role: collabRole(c),
     url: c.html_url,
   }));
 }
@@ -291,7 +345,7 @@ async function listIssues(): Promise<GithubIssue[]> {
     }>
   >(`/repos/${owner}/${repo}/issues?state=all&per_page=50&sort=updated`);
   return raw
-    .filter((i) => !i.pull_request) // GitHub returns PRs in the issues list too
+    .filter(isRealIssue) // GitHub returns PRs in the issues list too
     .map((i) => ({
       number: i.number,
       title: i.title,
@@ -301,6 +355,32 @@ async function listIssues(): Promise<GithubIssue[]> {
       createdAt: i.created_at,
       url: i.html_url,
     }));
+}
+
+// The signed-in user's repositories (no repo context needed — just the token).
+async function listMyRepos(): Promise<GhRepo[]> {
+  const raw = await ghFetch<
+    Array<{
+      full_name: string;
+      name: string;
+      owner: { login: string };
+      private: boolean;
+      clone_url: string;
+      description: string | null;
+      updated_at: string;
+    }>
+  >(
+    "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member",
+  );
+  return raw.map((r) => ({
+    fullName: r.full_name,
+    name: r.name,
+    owner: r.owner.login,
+    private: r.private,
+    cloneUrl: r.clone_url,
+    description: r.description ?? "",
+    updatedAt: r.updated_at,
+  }));
 }
 
 async function listRemoteBranches(): Promise<GithubBranch[]> {
@@ -327,6 +407,7 @@ export function wireGithub(log: (...a: unknown[]) => void): void {
   ipcMain.handle("gh:tokenStatus", () => status());
   ipcMain.handle("gh:setToken", (_e, token: string) => setToken(token));
   ipcMain.handle("gh:clearToken", () => clearGithubToken());
+  ipcMain.handle("gh:deviceStart", () => deviceStart());
   ipcMain.handle("gh:repoContext", () => repoContext());
   // Drop ETag cache so the next reads force fresh 200s (manual Refresh).
   ipcMain.handle("gh:invalidate", () => {
@@ -370,4 +451,5 @@ export function wireGithub(log: (...a: unknown[]) => void): void {
   ipcMain.handle("gh:listCollaborators", () => read(listCollaborators));
   ipcMain.handle("gh:listIssues", () => read(listIssues));
   ipcMain.handle("gh:listRemoteBranches", () => read(listRemoteBranches));
+  ipcMain.handle("gh:listMyRepos", () => read(listMyRepos));
 }

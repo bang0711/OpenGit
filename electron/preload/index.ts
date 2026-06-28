@@ -32,6 +32,12 @@ const github = {
   tokenStatus: () => ipcRenderer.invoke("gh:tokenStatus"),
   setToken: (token: string) => ipcRenderer.invoke("gh:setToken", token),
   clearToken: () => ipcRenderer.invoke("gh:clearToken"),
+  deviceStart: () => ipcRenderer.invoke("gh:deviceStart"),
+  onAuth: (cb: (status: unknown) => void) => {
+    const handler = (_e: unknown, payload: unknown) => cb(payload);
+    ipcRenderer.on("gh:auth", handler);
+    return () => ipcRenderer.removeListener("gh:auth", handler);
+  },
   repoContext: () => ipcRenderer.invoke("gh:repoContext"),
   invalidate: () => ipcRenderer.invoke("gh:invalidate"),
   listPRs: () => ipcRenderer.invoke("gh:listPRs"),
@@ -53,6 +59,7 @@ const github = {
   listCollaborators: () => ipcRenderer.invoke("gh:listCollaborators"),
   listIssues: () => ipcRenderer.invoke("gh:listIssues"),
   listRemoteBranches: () => ipcRenderer.invoke("gh:listRemoteBranches"),
+  listMyRepos: () => ipcRenderer.invoke("gh:listMyRepos"),
 };
 
 contextBridge.exposeInMainWorld("api", api);

@@ -15,6 +15,8 @@ const api = window.api;
 
 export const listDirectory = api.listDirectory;
 export const recentRepos = api.recentRepos;
+export const removeRecent = api.removeRecent;
+export const clearRecent = api.clearRecent;
 export const openRepo = api.openRepo;
 export const cloneRepo = api.cloneRepo;
 export const closeRepo = api.closeRepo;

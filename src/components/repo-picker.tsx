@@ -1,12 +1,16 @@
 import {
+  RiCloseLine,
   RiDownloadCloud2Line,
   RiFolderOpenLine,
+  RiGithubFill,
   RiGitRepositoryLine,
   RiLoader4Line,
 } from "@remixicon/react";
 import { useState } from "react";
-import { cloneRepo, openRepo } from "@/app/actions";
+import { clearRecent, cloneRepo, openRepo, removeRecent } from "@/app/actions";
+import { ActionTooltip } from "@/components/action-tooltip";
 import { FolderPicker } from "@/components/folder-picker";
+import { GithubRepoDialog } from "@/components/github-repo-dialog";
 import { GitLogo } from "@/components/git-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +28,7 @@ import { useRouter } from "@/lib/router";
 
 export function RepoPicker({ recent }: { recent: string[] }) {
   const router = useRouter();
+  const [recents, setRecents] = useState(recent);
   const [path, setPath] = useState("");
   const [url, setUrl] = useState("");
   const [directory, setDirectory] = useState("");
@@ -32,6 +37,7 @@ export function RepoPicker({ recent }: { recent: string[] }) {
   const [cloning, setCloning] = useState(false);
   const [openError, setOpenError] = useState<string>();
   const [cloneError, setCloneError] = useState<string>();
+  const [ghOpen, setGhOpen] = useState(false);
 
   const doOpen = async (p: string) => {
     if (opening) return;
@@ -51,6 +57,15 @@ export function RepoPicker({ recent }: { recent: string[] }) {
     setCloning(false);
     if (r.error) setCloneError(r.error);
     else router.push("/");
+  };
+
+  const removeOne = (p: string) => {
+    setRecents((rs) => rs.filter((r) => r !== p));
+    void removeRecent(p);
+  };
+  const clearAll = () => {
+    setRecents([]);
+    void clearRecent();
   };
 
   return (
@@ -128,6 +143,20 @@ export function RepoPicker({ recent }: { recent: string[] }) {
                 }}
                 className="flex flex-col gap-3"
               >
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setGhOpen(true)}
+                >
+                  <RiGithubFill /> Choose from your GitHub
+                </Button>
+                <div className="flex items-center gap-2">
+                  <div className="bg-border h-px flex-1" />
+                  <span className="text-muted-foreground text-[0.7rem]">
+                    or paste a URL
+                  </span>
+                  <div className="bg-border h-px flex-1" />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="clone-url">Remote URL</Label>
                   <Input
@@ -198,27 +227,53 @@ export function RepoPicker({ recent }: { recent: string[] }) {
             </TabsContent>
           </Tabs>
 
-          {recent.length > 0 ? (
+          {recents.length > 0 ? (
             <div className="mt-6">
-              <p className="text-muted-foreground mb-2 text-xs font-medium">
-                Recent
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-muted-foreground text-xs font-medium">
+                  Recent
+                </p>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-muted-foreground hover:text-foreground text-xs"
+                >
+                  Clear
+                </button>
+              </div>
               <div className="flex flex-col gap-1">
-                {recent.map((recentPath) => {
+                {recents.map((recentPath) => {
                   const { name, location } = splitRepoPath(recentPath);
                   return (
-                    <button
+                    <div
                       key={recentPath}
-                      type="button"
-                      onClick={() => doOpen(recentPath)}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground flex w-full min-w-0 items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors"
+                      className="group text-muted-foreground hover:bg-muted flex w-full min-w-0 items-center gap-2 rounded-md pr-1 transition-colors"
                     >
-                      <RiGitRepositoryLine className="size-3.5 shrink-0 self-center" />
-                      <span className="text-foreground shrink-0 font-medium">
-                        {name}
-                      </span>
-                      <span className="truncate text-[0.7rem]">{location}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => doOpen(recentPath)}
+                        className="hover:text-foreground flex min-w-0 flex-1 items-baseline gap-2 px-2 py-1.5 text-left text-xs"
+                      >
+                        <RiGitRepositoryLine className="size-3.5 shrink-0 self-center" />
+                        <span className="text-foreground shrink-0 font-medium">
+                          {name}
+                        </span>
+                        <span className="truncate text-[0.7rem]">
+                          {location}
+                        </span>
+                      </button>
+                      <ActionTooltip label="Remove from recent">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="shrink-0 opacity-0 group-hover:opacity-100"
+                          onClick={() => removeOne(recentPath)}
+                        >
+                          <RiCloseLine />
+                        </Button>
+                      </ActionTooltip>
+                    </div>
                   );
                 })}
               </div>
@@ -226,6 +281,16 @@ export function RepoPicker({ recent }: { recent: string[] }) {
           ) : null}
         </CardContent>
       </Card>
+
+      <GithubRepoDialog
+        open={ghOpen}
+        onOpenChange={setGhOpen}
+        onPick={(repo) => {
+          setUrl(repo.cloneUrl);
+          setToken(""); // private repos clone via the signed-in account
+          setCloneError(undefined);
+        }}
+      />
     </div>
   );
 }

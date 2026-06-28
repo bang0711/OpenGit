@@ -8,6 +8,8 @@ import {
   RiTeamLine,
 } from "@remixicon/react";
 import type { Collaborator, GithubBranch, GithubIssue } from "@shared/types";
+import { GhAvatar } from "@/components/gh-avatar";
+import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -17,17 +19,6 @@ function Empty({ icon, text }: { icon: React.ReactNode; text: string }) {
       {icon}
       <p className="text-xs">{text}</p>
     </div>
-  );
-}
-
-function Avatar({ url }: { url: string }) {
-  return (
-    <img
-      src={url}
-      alt=""
-      referrerPolicy="no-referrer"
-      className="ring-border size-7 shrink-0 rounded-full ring-1"
-    />
   );
 }
 
@@ -56,11 +47,11 @@ export function Collaborators({
           rel="noreferrer"
           className="hover:bg-muted/40 flex items-center gap-3 px-3 py-2 text-xs transition-colors"
         >
-          <Avatar url={c.avatarUrl} />
+          <GhAvatar url={c.avatarUrl} login={c.login} className="size-7" />
           <span className="font-medium">{c.login}</span>
-          <span className="text-muted-foreground border-border ml-auto rounded-full border px-2 py-0.5 text-[0.625rem] capitalize">
+          <Badge variant="outline" className="ml-auto capitalize">
             {c.role}
-          </span>
+          </Badge>
         </a>
       ))}
     </Card>
@@ -119,9 +110,7 @@ export function Branches({ branches }: { branches: GithubBranch[] }) {
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-2">
             {b.protected ? (
-              <span className="text-muted-foreground border-border rounded-full border px-2 py-0.5 text-[0.625rem]">
-                protected
-              </span>
+              <Badge variant="outline">protected</Badge>
             ) : null}
             <span className="text-muted-foreground font-mono text-[0.625rem]">
               {b.sha.slice(0, 7)}

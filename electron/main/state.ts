@@ -57,6 +57,18 @@ export function getRecentRepos(): string[] {
   return read().recent;
 }
 
+export function removeRecentRepo(path: string): void {
+  const s = read();
+  s.recent = s.recent.filter((p) => p !== path);
+  write(s);
+}
+
+export function clearRecentRepos(): void {
+  const s = read();
+  s.recent = [];
+  write(s);
+}
+
 // Raw GitHub token blob (encoded by secrets.ts). null when unset.
 export function getGithubTokenRaw(): string | null {
   return read().githubToken ?? null;

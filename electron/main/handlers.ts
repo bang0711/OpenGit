@@ -17,7 +17,8 @@ import type {
   WorkspaceData,
 } from "@shared/types";
 import { splitDiffIntoHunks } from "./diff-hunks";
-import { cloneAuthArgs, isWindowsDriveRoot } from "./path-utils";
+import { cloneAuthArgs, isWindowsDriveRoot, parseGithubRemote } from "./path-utils";
+import { getGithubToken } from "./secrets";
 import {
   GitError,
   getBlame,
@@ -43,8 +44,10 @@ import { registerRepo, resolveRepoPath } from "./repo-registry";
 import { withRepoLock } from "./repo-lock";
 import {
   clearActiveRepo,
+  clearRecentRepos,
   getActiveRepoId,
   getRecentRepos,
+  removeRecentRepo,
   setActiveRepo,
 } from "./state";
 
@@ -154,6 +157,16 @@ export function recentRepos(): string[] {
   return getRecentRepos();
 }
 
+export function removeRecent(path: string): ActionState {
+  removeRecentRepo(path);
+  return {};
+}
+
+export function clearRecent(): ActionState {
+  clearRecentRepos();
+  return {};
+}
+
 /** Open an existing repo by absolute path; sets it active. */
 export async function openRepo(path: string): Promise<ActionState> {
   const p = path.trim();
@@ -189,9 +202,12 @@ export async function cloneRepo(
       .split(/[/:]/)
       .pop() || "repo";
   const target = join(parent, name);
-  // For private HTTPS repos: authenticate with the token via an ephemeral
-  // -c http.extraHeader (not persisted to config, not embedded in the URL).
-  const cfg = cloneAuthArgs(token);
+  // For private HTTPS repos: authenticate via an ephemeral -c http.extraHeader
+  // (not persisted to config, not embedded in the URL). Use the explicit token
+  // if given, else fall back to the signed-in GitHub account for github.com URLs.
+  const auth =
+    token?.trim() || (parseGithubRemote(u) ? getGithubToken() : null);
+  const cfg = cloneAuthArgs(auth ?? undefined);
   try {
     await mkdir(parent, { recursive: true });
     await runGit(parent, [...cfg, "clone", u, target], {

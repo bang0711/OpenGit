@@ -3,6 +3,8 @@
 import { RiChat3Line, RiGitPullRequestLine } from "@remixicon/react";
 import type { PullRequest } from "@shared/types";
 import { useState } from "react";
+import { GhAvatar } from "@/components/gh-avatar";
+import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { prState } from "./status";
@@ -100,14 +102,18 @@ function PrRow({
         active ? "bg-primary/10" : "hover:bg-muted/40",
       )}
     >
-      <Avatar url={pr.author?.avatarUrl} />
+      <GhAvatar
+        url={pr.author?.avatarUrl}
+        login={pr.author?.login}
+        className="size-7"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[0.8rem] font-medium">{pr.title}</span>
           {pr.draft ? (
-            <span className="text-muted-foreground border-border shrink-0 rounded-full border px-1.5 text-[0.625rem]">
+            <Badge variant="outline" className="shrink-0">
               Draft
-            </span>
+            </Badge>
           ) : null}
         </div>
         <div className="text-muted-foreground mt-0.5 truncate text-[0.7rem]">
@@ -124,18 +130,5 @@ function PrRow({
         </span>
       ) : null}
     </button>
-  );
-}
-
-function Avatar({ url }: { url?: string }) {
-  if (!url)
-    return <div className="bg-muted size-7 shrink-0 rounded-full" />;
-  return (
-    <img
-      src={url}
-      alt=""
-      referrerPolicy="no-referrer"
-      className="ring-border size-7 shrink-0 rounded-full ring-1"
-    />
   );
 }

@@ -3,6 +3,8 @@
 import { RiArrowDownSLine, RiCloseLine } from "@remixicon/react";
 import type { Collaborator, GithubBranch } from "@shared/types";
 import { useEffect, useState } from "react";
+import { GhAvatar } from "@/components/gh-avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -182,16 +184,15 @@ export function CreatePrDialog({
                       onCheckedChange={() => toggleReviewer(c.login)}
                       onSelect={(e) => e.preventDefault()}
                     >
-                      <img
-                        src={c.avatarUrl}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        className="ring-border mr-1 size-5 rounded-full ring-1"
+                      <GhAvatar
+                        url={c.avatarUrl}
+                        login={c.login}
+                        className="mr-1"
                       />
                       <span className="font-medium">{c.login}</span>
-                      <span className="text-muted-foreground ml-auto text-[0.625rem]">
+                      <Badge variant="outline" className="ml-auto capitalize">
                         {c.role}
-                      </span>
+                      </Badge>
                     </DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuContent>
