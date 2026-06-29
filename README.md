@@ -20,6 +20,27 @@ local `git` and are reached from the UI through Tauri commands.
 - **GitHub** — sign in (OAuth Device Flow or token), **clone any repo from your account**, and a full **pull-request** workspace: list/filter, per-file diffs, checks, reviews & comments, merge / close, create PRs with reviewers, plus collaborators / issues / branches. Optional **real-time** PR updates via a self-hosted webhook relay.
 - **Updates + version picker** — the **Versions** button checks GitHub Releases and lets you download **and install any version** (up or downgrade), cross-platform.
 
+## Upgrading from the Electron version
+
+OpenGit moved from Electron to **Tauri** (much smaller, native webview). If you ran
+an older Electron build, you must **reinstall once** — the Electron auto-updater
+can't cross over to a Tauri release (different update mechanism; it looks for a
+`latest.yml` the Tauri builds don't produce, so it 404s on update-check).
+
+One-time steps:
+
+1. **Uninstall** the old OpenGit (Settings → Apps → OpenGit; it lived in
+   `…\AppData\Local\Programs\OpenGit`).
+2. **Install** the new `OpenGit-Setup-<version>.exe`.
+
+After that, in-app updates work again. Notes:
+
+- **Sign in again** — the GitHub token moved from an encrypted file to the OS
+  keychain (Windows Credential Manager / macOS Keychain / libsecret).
+- **Recent-repos list resets once** — app data moved to a new per-app folder.
+- The two installs don't collide (different install dirs), but the old one keeps
+  failing its update-check until you remove it.
+
 ## GitHub integration
 
 Sign in once (the token is stored in your OS keychain and shared across clone +
