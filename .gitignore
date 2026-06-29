@@ -42,8 +42,12 @@ next-env.d.ts
 .mcp.json
 .agents
 
-# electron build output
+# build output (Vite renderer)
 /dist
 /release
 # generated at build time
 /THIRD-PARTY-NOTICES.txt
+
+# Tauri (Rust) build artifacts
+/src-tauri/target
+/src-tauri/gen

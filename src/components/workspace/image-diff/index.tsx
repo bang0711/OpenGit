@@ -5,10 +5,6 @@ import type { ImageDiff } from "@shared/types";
 import { useEffect, useState } from "react";
 import { commitFileImage, workingFileImage } from "@/app/actions";
 
-// Checkerboard so transparent (PNG/SVG) regions are visible against the canvas.
-const CHECKER =
-  "repeating-conic-gradient(var(--muted) 0% 25%, transparent 0% 50%) 50% / 16px 16px";
-
 function ImageSide({
   url,
   label,
@@ -23,10 +19,7 @@ function ImageSide({
       <div className="bg-muted/40 text-muted-foreground border-border truncate border-b px-3 py-0.5 text-xs font-semibold">
         <span title={label}>{label}</span>
       </div>
-      <div
-        className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
-        style={{ background: CHECKER }}
-      >
+      <div className="bg-muted/20 flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
         {url ? (
           // biome-ignore lint/performance/noImgElement: local data URL, no Next image
           <img

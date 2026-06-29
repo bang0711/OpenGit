@@ -1,3 +1,6 @@
+// MUST be first: installs window.api/github/updater (side effect on import) before
+// any other module evaluates and reads them (e.g. app/actions.ts at module top).
+import "./bridge";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";

@@ -1,51 +1,91 @@
 name: Release
 
-# Build installers for all three OSes and publish them to a GitHub Release.
-# Trigger by pushing a version tag:  git tag v1.1.0 && git push origin v1.1.0
-# (bump "version" in package.json to match first).
+# Build installers for all three OSes (Tauri) and publish them to a GitHub
+# Release. Trigger by pushing a version tag:  git tag v1.1.0 && git push origin v1.1.0
+# (bump "version" in package.json, src-tauri/tauri.conf.json and src-tauri/Cargo.toml
+# to match first — `bun run release` cuts the tag from package.json's version).
 on:
   push:
     tags:
-      - "v*"
+    - "v*"
 
 jobs:
-  # Gate: typecheck + tests must pass before any installer is built.
+  # Gate: renderer typecheck + tests, plus the Rust backend tests.
   test:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test
+    - uses: actions/checkout@v4
+    - uses: oven-sh/setup-bun@v2
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "src-tauri -> target"
+    - name: Install Linux deps for Tauri
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+    - run: bun install --frozen-lockfile
+    - run: bun run typecheck
+    - run: bun run test
+    - name: Rust tests
+      run: cargo test --manifest-path src-tauri/Cargo.toml
 
   release:
     needs: test # only build/publish if tests passed
     permissions:
-      contents: write # electron-builder needs to create/upload the release
+      contents: write # tauri-action creates/uploads the release
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-22.04]
+        os: [ windows-latest, macos-latest, ubuntu-22.04 ]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+    - uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+    - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build & publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GitHub OAuth App client id baked into the binary at build time
-          # (public — device flow has no secret). Set this repo/org Actions
-          # variable so released installers ship with one-click login enabled.
-          OPENGIT_GH_CLIENT_ID: ${{ vars.OPENGIT_GH_CLIENT_ID }}
-          # No code-signing certs on CI — skip macOS signing so the dmg builds.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: bun run electron:publish
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "src-tauri -> target"
+
+    - name: Install Linux deps for Tauri
+      if: matrix.os == 'ubuntu-22.04'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+
+    - name: Build & upload installers
+      uses: tauri-apps/tauri-action@v0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # GitHub OAuth App client id baked into the binary at build time (public —
+        # device flow has no secret). Set this repo/org Actions variable so released
+        # installers ship with one-click login enabled.
+        OPENGIT_GH_CLIENT_ID: ${{ vars.OPENGIT_GH_CLIENT_ID }}
+      with:
+        # Use bun to drive the Tauri CLI (matches local scripts).
+        tauriScript: bun run tauri
+        tagName: ${{ github.ref_name }}
+        releaseName: "OpenGit ${{ github.ref_name }}"
+        releaseDraft: true
+        prerelease: false
+
+    # Portable Windows build: the raw exe runs without installing (nothing added
+    # to Start menu / Search). Upload it alongside the NSIS installer.
+    - name: Upload portable EXE (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        v="${{ github.ref_name }}"; v="${v#v}"
+        cp "src-tauri/target/release/opengit.exe" "OpenGit-${v}-portable.exe"
+        gh release upload "${{ github.ref_name }}" "OpenGit-${v}-portable.exe" --clobber
 
   # Flip the draft release to published only after ALL OS builds have uploaded,
   # so users never see a partial release.
@@ -55,9 +95,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          gh release edit "${{ github.ref_name }}"
-          --repo "${{ github.repository }}"
-          --draft=false --latest
+    - env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: >
+        gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false --latest

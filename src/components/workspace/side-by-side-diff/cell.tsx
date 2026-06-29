@@ -1,3 +1,4 @@
+import { useGrammarsReady } from "@/hooks/use-grammars";
 import { highlightLine } from "@/lib/highlight";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,8 @@ export function Cell({
   className?: string;
 }) {
   const empty = text === null;
+  // Re-render once the lazy grammar chunk loads so highlighting upgrades in.
+  const ready = useGrammarsReady();
   return (
     <div
       className={cn(
@@ -35,7 +38,11 @@ export function Cell({
           <span className="text-muted-foreground/60 select-none">{sign} </span>
           {/* Prism escapes its input; diff text is local repo content. */}
           {/* biome-ignore lint/security/noDangerouslySetInnerHtml: trusted Prism output */}
-          <span dangerouslySetInnerHTML={{ __html: highlightLine(text, lang) }} />
+          <span
+            dangerouslySetInnerHTML={{
+              __html: highlightLine(text, ready ? lang : undefined),
+            }}
+          />
         </span>
       ) : null}
     </div>
