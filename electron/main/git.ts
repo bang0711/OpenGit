@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
+import { imageMime } from "@shared/image";
 import type {
   BlameLine,
   Branch,
@@ -12,6 +13,7 @@ import type {
   ConflictVersions,
   FileStatus,
   GitResult,
+  ImageDiff,
   MergeState,
   RebaseCommit,
   Remote,
@@ -335,6 +337,65 @@ export async function getCommitFileDiff(
     file,
   ]);
   return stdout;
+}
+
+/** Run git and return raw bytes (for binary blobs like images). */
+async function runGitBuffer(cwd: string, args: string[]): Promise<Buffer> {
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    maxBuffer: MAX_BUFFER,
+    windowsHide: true,
+    encoding: "buffer",
+  });
+  return stdout as Buffer;
+}
+
+function toDataUrl(buf: Buffer, mime: string): string {
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
+/**
+ * Old (parent) + new (this commit) versions of an image file as data URLs.
+ * A side is null when the blob doesn't exist there (file added/deleted).
+ */
+export async function getCommitFileImage(
+  path: string,
+  sha: string,
+  file: string,
+): Promise<ImageDiff> {
+  const mime = imageMime(file) ?? "application/octet-stream";
+  const read = async (rev: string): Promise<string | null> => {
+    try {
+      return toDataUrl(
+        await runGitBuffer(path, ["show", `${rev}:${file}`]),
+        mime,
+      );
+    } catch {
+      return null;
+    }
+  };
+  const [oldUrl, newUrl] = await Promise.all([read(`${sha}^`), read(sha)]);
+  return { old: oldUrl, new: newUrl };
+}
+
+/** HEAD version (old) + on-disk working version (new) of an image file. */
+export async function getWorkingFileImage(
+  path: string,
+  file: string,
+): Promise<ImageDiff> {
+  const mime = imageMime(file) ?? "application/octet-stream";
+  let oldUrl: string | null = null;
+  try {
+    oldUrl = toDataUrl(
+      await runGitBuffer(path, ["show", `HEAD:${file}`]),
+      mime,
+    );
+  } catch {}
+  let newUrl: string | null = null;
+  try {
+    newUrl = toDataUrl(await readFile(join(path, file)), mime);
+  } catch {}
+  return { old: oldUrl, new: newUrl };
 }
 
 export async function getMergeState(path: string): Promise<MergeState> {

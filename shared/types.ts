@@ -112,6 +112,9 @@ export type RebaseOp = "pick" | "squash" | "fixup" | "drop";
 export type HunkData = { unstaged: string; staged: string };
 export type DiffResult = { diff: string };
 
+/** Old/new versions of an image file as data URLs (null = absent on that side). */
+export type ImageDiff = { old: string | null; new: string | null };
+
 /** Everything the workspace screen needs in one round-trip. */
 export type WorkspaceData = {
   repo: RepoInfo;
@@ -154,7 +157,9 @@ export interface Api {
   workspace(): Promise<WorkspaceData | Err>;
   commitDetail(sha: string): Promise<CommitDetail | Err>;
   commitFileDiff(sha: string, file: string): Promise<Diff | Err>;
+  commitFileImage(sha: string, file: string): Promise<ImageDiff | Err>;
   workingFileDiff(file: string): Promise<Diff | Err>;
+  workingFileImage(file: string): Promise<ImageDiff | Err>;
   fileHunkDiffs(file: string): Promise<HunkData | Err>;
   conflictVersions(file: string): Promise<ConflictVersions | Err>;
   blameFile(file: string): Promise<{ lines: BlameLine[] } | Err>;
@@ -345,7 +350,11 @@ export interface Github {
   mergePR(number: number, method: MergeMethod): Promise<ActionState>;
   closePR(number: number): Promise<ActionState>;
   commentPR(number: number, body: string): Promise<ActionState>;
-  reviewPR(number: number, event: ReviewEvent, body?: string): Promise<ActionState>;
+  reviewPR(
+    number: number,
+    event: ReviewEvent,
+    body?: string,
+  ): Promise<ActionState>;
   createPR(
     title: string,
     body: string,

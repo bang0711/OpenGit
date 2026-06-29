@@ -1,7 +1,7 @@
 "use client";
 
 import { RiArrowLeftLine, RiGitCommitLine } from "@remixicon/react";
-import Link from "@/lib/link";
+import { isImagePath } from "@shared/image";
 import { useEffect, useRef, useState } from "react";
 import { commitFileDiff } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { FileTree } from "@/components/workspace/file-tree";
 import type { TreeNode } from "@/lib/file-tree";
+import Link from "@/lib/link";
 import { DiffPane } from "./diff-pane";
 
 /**
@@ -52,6 +53,12 @@ export function CommitDiffViewer({
 
   useEffect(() => {
     if (!selected) return;
+    // Images are fetched as blobs by DiffPane, not as a text patch.
+    if (isImagePath(selected)) {
+      setPatch(null);
+      setError(null);
+      return;
+    }
     const cached = cache.current.get(selected);
     if (cached !== undefined) {
       setPatch(cached);
@@ -127,6 +134,7 @@ export function CommitDiffViewer({
         <ResizablePanel defaultSize="76%" className="relative">
           <div className="absolute inset-0 flex flex-col">
             <DiffPane
+              sha={sha}
               patch={patch}
               pending={pending}
               error={error}

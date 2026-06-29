@@ -1,11 +1,12 @@
 "use client";
 
 import { RiSearchLine } from "@remixicon/react";
-import { useMemo, useState, useTransition } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { createBranchAt, createTagAt } from "@/app/actions";
 import { NameDialog } from "@/components/name-dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { RebaseDialog } from "@/components/workspace/rebase-dialog";
 import type { Commit } from "@/lib/git";
 import { buildGraph } from "@/lib/graph";
@@ -47,6 +48,16 @@ export function CommitGraph({
   const { rows, width } = useMemo(() => buildGraph(shown), [shown]);
   const graphWidth = laneX(Math.max(width, 1));
 
+  // Virtualize: render only the rows in view. Big repos (1000s of commits) keep
+  // the DOM tiny instead of mounting every row.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virt = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 12,
+  });
+
   const onCreateSubmit = (name: string) => {
     if (!create) return;
     const action =
@@ -83,21 +94,33 @@ export function CommitGraph({
           No commits match “{query}”.
         </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <div>
-            {rows.map((row) => (
-              <CommitRow
-                key={row.commit.sha}
-                row={row}
-                graphWidth={graphWidth}
-                selected={selected === row.commit.sha}
-                onSelect={() => onSelect(row.commit.sha)}
-                onCreate={(kind, sha) => setCreate({ kind, sha })}
-                onRebase={(sha) => setRebaseBase(sha)}
-              />
-            ))}
+        <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef}>
+          <div style={{ height: virt.getTotalSize(), position: "relative" }}>
+            {virt.getVirtualItems().map((vi) => {
+              const row = rows[vi.index];
+              return (
+                <div
+                  key={row.commit.sha}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${vi.start}px)`,
+                  }}
+                >
+                  <CommitRow
+                    row={row}
+                    graphWidth={graphWidth}
+                    selected={selected === row.commit.sha}
+                    onSelect={() => onSelect(row.commit.sha)}
+                    onCreate={(kind, sha) => setCreate({ kind, sha })}
+                    onRebase={(sha) => setRebaseBase(sha)}
+                  />
+                </div>
+              );
+            })}
           </div>
-          <ScrollBar orientation="horizontal" />
         </ScrollArea>
       )}
 

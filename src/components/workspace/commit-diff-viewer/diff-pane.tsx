@@ -1,4 +1,6 @@
 import { RiLoader4Line } from "@remixicon/react";
+import { isImagePath } from "@shared/image";
+import { CommitImageDiff } from "@/components/workspace/image-diff";
 import { SideBySideDiff } from "@/components/workspace/side-by-side-diff";
 import { type DiffRow, parseUnifiedDiff } from "@/lib/diff";
 import { langFromPath } from "@/lib/highlight";
@@ -6,6 +8,7 @@ import { Notice } from "./notice";
 
 /** Renders one file's diff (or a notice/spinner) from a raw unified patch. */
 export function DiffPane({
+  sha,
   patch,
   pending,
   error,
@@ -13,6 +16,7 @@ export function DiffPane({
   oldLabel,
   newLabel,
 }: {
+  sha?: string;
   patch: string | null;
   pending: boolean;
   error: string | null;
@@ -21,6 +25,18 @@ export function DiffPane({
   newLabel: string;
 }) {
   if (!file) return <Notice>Select a file to view changes.</Notice>;
+  // Image files: render the picture, not the binary patch. Needs a local commit
+  // sha to read blobs (PR review diffs have none → fall through to text).
+  if (sha && isImagePath(file)) {
+    return (
+      <CommitImageDiff
+        sha={sha}
+        file={file}
+        oldLabel={oldLabel}
+        newLabel={newLabel}
+      />
+    );
+  }
   // Keep the old diff visible while the next one loads — show a spinner only on
   // the first load (no patch yet).
   if (pending && patch === null) {

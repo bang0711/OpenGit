@@ -10,6 +10,7 @@ import type {
   DirEntry,
   DirListing,
   HunkData,
+  ImageDiff,
   PullMode,
   RebaseCommit,
   RebaseOp,
@@ -17,14 +18,13 @@ import type {
   WorkspaceData,
 } from "@shared/types";
 import { splitDiffIntoHunks } from "./diff-hunks";
-import { cloneAuthArgs, isWindowsDriveRoot, parseGithubRemote } from "./path-utils";
-import { getGithubToken } from "./secrets";
 import {
   GitError,
   getBlame,
   getBranches,
   getCommitDetail,
   getCommitFileDiff,
+  getCommitFileImage,
   getCommits,
   getConflictVersions,
   getMergeState,
@@ -37,11 +37,18 @@ import {
   getTags,
   getUnstagedFileDiff,
   getWorkingFileDiff,
+  getWorkingFileImage,
   isGitRepo,
   runGit,
 } from "./git";
-import { registerRepo, resolveRepoPath } from "./repo-registry";
+import {
+  cloneAuthArgs,
+  isWindowsDriveRoot,
+  parseGithubRemote,
+} from "./path-utils";
 import { withRepoLock } from "./repo-lock";
+import { registerRepo, resolveRepoPath } from "./repo-registry";
+import { getGithubToken } from "./secrets";
 import {
   clearActiveRepo,
   clearRecentRepos,
@@ -271,7 +278,22 @@ export async function commitFileDiff(
   file: string,
 ): Promise<{ diff: string } | { error: string }> {
   try {
-    return { diff: await getCommitFileDiff(await requireActiveRepo(), sha, file) };
+    return {
+      diff: await getCommitFileDiff(await requireActiveRepo(), sha, file),
+    };
+  } catch (err) {
+    return {
+      error: err instanceof GitError ? err.message : (err as Error).message,
+    };
+  }
+}
+
+export async function commitFileImage(
+  sha: string,
+  file: string,
+): Promise<ImageDiff | { error: string }> {
+  try {
+    return await getCommitFileImage(await requireActiveRepo(), sha, file);
   } catch (err) {
     return {
       error: err instanceof GitError ? err.message : (err as Error).message,
@@ -284,6 +306,18 @@ export async function workingFileDiff(
 ): Promise<{ diff: string } | { error: string }> {
   try {
     return { diff: await getWorkingFileDiff(await requireActiveRepo(), file) };
+  } catch (err) {
+    return {
+      error: err instanceof GitError ? err.message : (err as Error).message,
+    };
+  }
+}
+
+export async function workingFileImage(
+  file: string,
+): Promise<ImageDiff | { error: string }> {
+  try {
+    return await getWorkingFileImage(await requireActiveRepo(), file);
   } catch (err) {
     return {
       error: err instanceof GitError ? err.message : (err as Error).message,
@@ -352,7 +386,11 @@ export const gitPushSetUpstream = () =>
 export const gitPushForce = () => gitAction(["push", "--force-with-lease"]);
 export function gitPull(mode: PullMode = "ff-or-merge"): Promise<ActionState> {
   const flag =
-    mode === "ff" ? "--ff-only" : mode === "rebase" ? "--rebase" : "--no-rebase";
+    mode === "ff"
+      ? "--ff-only"
+      : mode === "rebase"
+        ? "--rebase"
+        : "--no-rebase";
   return gitAction(["pull", flag]);
 }
 
@@ -370,7 +408,8 @@ export const discardAll = () =>
     await runGit(repo, ["clean", "-fd"]);
   });
 export function commit(message: string): Promise<ActionState> {
-  if (!message.trim()) return Promise.resolve({ error: "Commit message is required." });
+  if (!message.trim())
+    return Promise.resolve({ error: "Commit message is required." });
   return gitAction(["commit", "-m", message]);
 }
 export function amendCommit(message?: string): Promise<ActionState> {
@@ -391,24 +430,31 @@ export function renameBranch(
   oldName: string,
   newName: string,
 ): Promise<ActionState> {
-  if (!newName.trim()) return Promise.resolve({ error: "New name is required." });
+  if (!newName.trim())
+    return Promise.resolve({ error: "New name is required." });
   return gitAction(["branch", "-m", oldName, newName.trim()]);
 }
 export const deleteRemoteBranch = (remote: string, branch: string) =>
   gitAction(["push", remote, "--delete", branch]);
 export function createBranch(name: string): Promise<ActionState> {
-  if (!name.trim()) return Promise.resolve({ error: "Branch name is required." });
+  if (!name.trim())
+    return Promise.resolve({ error: "Branch name is required." });
   return gitAction(["switch", "-c", name]);
 }
-export function createBranchAt(name: string, sha: string): Promise<ActionState> {
-  if (!name.trim()) return Promise.resolve({ error: "Branch name is required." });
+export function createBranchAt(
+  name: string,
+  sha: string,
+): Promise<ActionState> {
+  if (!name.trim())
+    return Promise.resolve({ error: "Branch name is required." });
   return gitAction(["branch", name, sha]);
 }
 export function createRemoteBranch(
   remote: string,
   name: string,
 ): Promise<ActionState> {
-  if (!name.trim()) return Promise.resolve({ error: "Branch name is required." });
+  if (!name.trim())
+    return Promise.resolve({ error: "Branch name is required." });
   if (!remote.trim()) return Promise.resolve({ error: "Remote is required." });
   return gitAction(["push", remote, `HEAD:refs/heads/${name}`]);
 }
@@ -416,7 +462,8 @@ export function publishBranch(
   remote: string,
   name: string,
 ): Promise<ActionState> {
-  if (!name.trim()) return Promise.resolve({ error: "Branch name is required." });
+  if (!name.trim())
+    return Promise.resolve({ error: "Branch name is required." });
   if (!remote.trim()) return Promise.resolve({ error: "Remote is required." });
   return mutate(async (repo) => {
     await runGit(repo, ["switch", "-c", name]);
@@ -555,7 +602,10 @@ export const stageWorkingHunk = (file: string, index: number) =>
   });
 
 // ── Interactive rebase ──────────────────────────────────────────────────────
-export const interactiveRebase = (base: string, ops: Record<string, RebaseOp>) =>
+export const interactiveRebase = (
+  base: string,
+  ops: Record<string, RebaseOp>,
+) =>
   mutate(async (repo) => {
     const commits = await getRebaseCommits(repo, base);
     if (commits.length === 0) throw new GitError("Nothing to rebase.", []);
@@ -573,7 +623,10 @@ export const interactiveRebase = (base: string, ops: Record<string, RebaseOp>) =
     }
     if (todo.every((l) => l.startsWith("drop")))
       throw new GitError("Cannot drop every commit.", []);
-    const tmp = join(tmpdir(), `opengit-rebase-${Date.now()}-${process.pid}.txt`);
+    const tmp = join(
+      tmpdir(),
+      `opengit-rebase-${Date.now()}-${process.pid}.txt`,
+    );
     await writeFile(tmp, `${todo.join("\n")}\n`);
     try {
       await runGit(repo, ["rebase", "-i", base], {

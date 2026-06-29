@@ -1,8 +1,7 @@
 "use client";
 
 import { RiHistoryLine, RiLoader4Line } from "@remixicon/react";
-import Link from "@/lib/link";
-import { useRouter } from "@/lib/router";
+import { isImagePath } from "@shared/image";
 import { useEffect, useState, useTransition } from "react";
 import {
   fileHunkDiffs,
@@ -14,8 +13,11 @@ import {
   workingFileDiff,
 } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { WorkingImageDiff } from "@/components/workspace/image-diff";
 import { usePersistedState } from "@/hooks/use-persisted-state";
+import Link from "@/lib/link";
 import { notify } from "@/lib/notify";
+import { useRouter } from "@/lib/router";
 import { SplitView } from "./split-view";
 import { UnifiedView } from "./unified-view";
 import { ViewToggle } from "./view-toggle";
@@ -35,8 +37,11 @@ export function WorkingDiff({ file }: { file: string }) {
   const [rev, setRev] = useState(0);
   const [pending, startTransition] = useTransition();
 
+  const isImage = isImagePath(file);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: `rev` is a manual refetch trigger
   useEffect(() => {
+    if (isImage) return; // images load via WorkingImageDiff, not a text patch
     startTransition(async () => {
       if (view === "unified") {
         const r = await fileHunkDiffs(file);
@@ -76,7 +81,7 @@ export function WorkingDiff({ file }: { file: string }) {
         <span className="truncate">{file}</span>
         {pending ? <RiLoader4Line className="size-3.5 animate-spin" /> : null}
         <div className="ml-auto flex items-center gap-1">
-          <ViewToggle view={view} onChange={setView} />
+          {!isImage && <ViewToggle view={view} onChange={setView} />}
           <Button asChild variant="ghost" size="xs">
             <Link href={{ pathname: "/blame", query: { file } }}>
               <RiHistoryLine /> Blame
@@ -85,7 +90,9 @@ export function WorkingDiff({ file }: { file: string }) {
         </div>
       </div>
 
-      {error ? (
+      {isImage ? (
+        <WorkingImageDiff file={file} />
+      ) : error ? (
         <p className="text-destructive p-3 text-xs">{error}</p>
       ) : view === "split" ? (
         <SplitView

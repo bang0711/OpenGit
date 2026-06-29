@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useRef } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import type { DiffRow } from "@/lib/diff";
-import { DiffRows } from "./diff-rows";
+import { Row } from "./row";
 
 /**
  * Azure-style side-by-side diff with a draggable divider. Rows share one
@@ -33,7 +34,25 @@ export function SideBySideDiff({
 }) {
   const [leftPct, setLeftPct] = usePersistedState("opengit.diffSplit", 50);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const cols = { gridTemplateColumns: `${leftPct}% ${100 - leftPct}%` };
+
+  // Map each row index to its hunk ordinal (for stage/revert), -1 for non-hunks.
+  const hunkIndexByRow = useMemo(() => {
+    const arr: number[] = [];
+    let h = 0;
+    for (const r of rows) arr.push(r.type === "hunk" ? h++ : -1);
+    return arr;
+  }, [rows]);
+
+  // Virtualize rows. Heights vary (long lines wrap), so measure dynamically via
+  // the ResizeObserver tanstack wires up through measureElement.
+  const virt = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 20,
+    overscan: 16,
+  });
 
   const startDrag = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -76,17 +95,32 @@ export function SideBySideDiff({
       </div>
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
-        <ScrollArea className="inset-0 h-full">
-          <div>
-            <DiffRows
-              rows={rows}
-              cols={cols}
-              lang={lang}
-              onStage={onStageHunk}
-              onRevert={onRevertHunk}
-            />
+        <ScrollArea className="h-full inset-0" viewportRef={scrollRef}>
+          <div style={{ height: virt.getTotalSize(), position: "relative" }}>
+            {virt.getVirtualItems().map((vi) => (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={virt.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vi.start}px)`,
+                }}
+              >
+                <Row
+                  row={rows[vi.index]}
+                  cols={cols}
+                  lang={lang}
+                  hunkIndex={Math.max(0, hunkIndexByRow[vi.index])}
+                  onStage={onStageHunk}
+                  onRevert={onRevertHunk}
+                />
+              </div>
+            ))}
           </div>
-          <ScrollBar orientation="horizontal" />
         </ScrollArea>
         {/* Draggable divider overlaying the viewport at the split position. */}
         <button
