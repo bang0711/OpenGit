@@ -39,6 +39,9 @@ jobs:
       matrix:
         os: [ windows-latest, macos-latest, ubuntu-22.04 ]
     runs-on: ${{ matrix.os }}
+    env:
+      # secrets can't be used in `if:` directly — collapse to a boolean string here.
+      SIGN_WINDOWS: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
     - uses: actions/checkout@v4
 
@@ -58,6 +61,28 @@ jobs:
 
     - name: Install dependencies
       run: bun install --frozen-lockfile
+
+    # Code-sign the Windows build (skipped automatically if WINDOWS_CERTIFICATE
+    # secret is unset). Imports the base64 PFX, then injects its thumbprint +
+    # timestamp settings into tauri.conf.json so tauri's bundler signs the exe
+    # and NSIS installer. signtool ships with the windows-latest runner.
+    - name: Sign Windows build
+      if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
+      shell: pwsh
+      env:
+        WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      run: |
+        $pfx = "$env:RUNNER_TEMP\cert.pfx"
+        [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+        $pw = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+        $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+        $conf = "src-tauri/tauri.conf.json"
+        $j = Get-Content $conf -Raw | ConvertFrom-Json
+        $j.bundle.windows | Add-Member -Force certificateThumbprint $cert.Thumbprint
+        $j.bundle.windows | Add-Member -Force digestAlgorithm "sha256"
+        $j.bundle.windows | Add-Member -Force timestampUrl "http://timestamp.digicert.com"
+        $j | ConvertTo-Json -Depth 100 | Set-Content $conf
 
     - name: Build & upload installers
       uses: tauri-apps/tauri-action@v0

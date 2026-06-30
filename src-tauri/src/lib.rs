@@ -2,15 +2,20 @@
 // the old Electron IPC namespaces by name + positional args, returning the JSON
 // shapes from shared/types.ts. Logical errors come back as `{ "error": msg }`
 // objects (not Err) so the renderer's `if ("error" in res)` checks keep working.
+mod azure;
+mod bitbucket;
 mod diff_hunks;
 mod git;
 mod github;
+mod gitlab;
 mod path_utils;
+mod provider;
 mod repo_lock;
 mod repo_ops;
 mod repo_registry;
 mod secrets;
 mod state;
+mod terminal;
 mod types;
 mod updater;
 mod watch;
@@ -55,7 +60,7 @@ async fn gh_call(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    Ok(github::dispatch(state.inner(), &app, &name, args).await)
+    Ok(provider::dispatch(state.inner(), &app, &name, args).await)
 }
 
 #[tauri::command]
@@ -86,6 +91,7 @@ pub fn run() {
                 http: reqwest::Client::new(),
                 watch: watch::Watcher::default(),
             });
+            app.manage(terminal::TerminalState::default());
 
             // Start watching the active repo (if any) once state is managed.
             let handle = app.handle().clone();
@@ -96,7 +102,15 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![api_call, gh_call, updater_call])
+        .invoke_handler(tauri::generate_handler![
+            api_call,
+            gh_call,
+            updater_call,
+            terminal::terminal_start,
+            terminal::terminal_input,
+            terminal::terminal_resize,
+            terminal::terminal_kill,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

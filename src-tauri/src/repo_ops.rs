@@ -63,6 +63,98 @@ fn repo_at(p: &Path) -> bool {
     p.join(".git").exists()
 }
 
+async fn cfg_get(path: &str, key: &str) -> Option<String> {
+    git::run_git(path, &["config", "--get", key], &[])
+        .await
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// The effective git identity + commit-signing config for the active repo.
+async fn read_identity(path: &str) -> Value {
+    json!({
+        "userName": cfg_get(path, "user.name").await,
+        "userEmail": cfg_get(path, "user.email").await,
+        "signingKey": cfg_get(path, "user.signingkey").await,
+        "gpgFormat": cfg_get(path, "gpg.format").await,
+        "sign": cfg_get(path, "commit.gpgsign").await.map(|v| v == "true").unwrap_or(false),
+    })
+}
+
+/// Write the identity/signing fields to the repo's *local* config (empty text
+/// fields are unset, falling back to global). `sign` is always written.
+async fn set_identity(st: &AppState, v: Option<&Value>) -> Value {
+    let Some(Value::Object(obj)) = v else {
+        return err("Invalid config payload.");
+    };
+    let obj = obj.clone();
+    run_locked(st, |p| async move {
+        let str_field = |k: &str| obj.get(k).and_then(Value::as_str).map(str::to_string);
+        let sign = obj.get("sign").and_then(Value::as_bool).unwrap_or(false);
+        let fields: Vec<(&str, Option<String>)> = vec![
+            ("user.name", str_field("userName")),
+            ("user.email", str_field("userEmail")),
+            ("user.signingkey", str_field("signingKey")),
+            ("gpg.format", str_field("gpgFormat")),
+            ("commit.gpgsign", Some(if sign { "true" } else { "false" }.to_string())),
+        ];
+        for (key, val) in fields {
+            match val {
+                Some(v) if !v.trim().is_empty() => {
+                    git::run_git(&p, &["config", key, v.trim()], &[]).await?;
+                }
+                _ => {
+                    let _ = git::run_git(&p, &["config", "--unset", key], &[]).await;
+                }
+            }
+        }
+        Ok(())
+    })
+    .await
+}
+
+/// git-lfs availability + the repo's tracked patterns (from `git lfs track`).
+async fn read_lfs(path: &str) -> Value {
+    let installed = git::run_git(path, &["lfs", "version"], &[]).await.is_ok();
+    let patterns: Vec<String> = if installed {
+        git::run_git(path, &["lfs", "track"], &[])
+            .await
+            .map(|out| {
+                out.lines()
+                    // tracked entries are indented; the "Listing…" header is not.
+                    .filter(|l| l.starts_with(char::is_whitespace))
+                    .filter_map(|l| {
+                        let pat = l.trim().split(" (").next()?.trim();
+                        (!pat.is_empty()).then(|| pat.to_string())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+    json!({ "installed": installed, "patterns": patterns })
+}
+
+/// First matching GitHub pull-request template in the repo, or "" if none.
+async fn read_pr_template(repo: &str) -> String {
+    const CANDIDATES: &[&str] = &[
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".github/pull_request_template.md",
+        "PULL_REQUEST_TEMPLATE.md",
+        "pull_request_template.md",
+        "docs/PULL_REQUEST_TEMPLATE.md",
+        "docs/pull_request_template.md",
+    ];
+    for c in CANDIDATES {
+        if let Ok(s) = tokio::fs::read_to_string(Path::new(repo).join(c)).await {
+            return s;
+        }
+    }
+    String::new()
+}
+
 const DRIVES: &str = "::drives";
 
 fn list_drives() -> DirListing {
@@ -309,6 +401,62 @@ enum HunkSource {
     Working,
 }
 
+fn parse_line_keys(v: Option<&Value>) -> std::collections::HashSet<(bool, i64)> {
+    let mut set = std::collections::HashSet::new();
+    if let Some(Value::Array(arr)) = v {
+        for it in arr {
+            let add = it.get("add").and_then(Value::as_bool).unwrap_or(false);
+            if let Some(line) = it.get("line").and_then(Value::as_i64) {
+                set.insert((add, line));
+            }
+        }
+    }
+    set
+}
+
+/// Stage/unstage/discard a selected subset of a file's changed lines. `mode`
+/// picks the diff source + apply direction (mirrors hunk_op).
+async fn line_op(
+    st: &AppState,
+    file: &str,
+    selected: std::collections::HashSet<(bool, i64)>,
+    mode: &str,
+) -> Value {
+    if selected.is_empty() {
+        return err("No lines selected.");
+    }
+    // Modes mirror the working split view, which diffs HEAD vs working tree, so
+    // staging reads from the Working source to keep line numbers aligned.
+    let (source, reverse, extra): (HunkSource, bool, &[&str]) = match mode {
+        "stage" => (HunkSource::Working, false, &["--cached"]),
+        "unstage" => (HunkSource::Staged, true, &["--cached", "--reverse"]),
+        "discard" => (HunkSource::Working, true, &["--reverse"]),
+        _ => return err("Unknown line mode."),
+    };
+    let (id, path) = match require_active(st).await {
+        Ok(v) => v,
+        Err(e) => return err(e),
+    };
+    let lock = st.locks.for_repo(&id);
+    let _g = lock.lock().await;
+    let diff = match source {
+        HunkSource::Unstaged => git::get_unstaged_file_diff(&path, file).await,
+        HunkSource::Staged => git::get_staged_file_diff(&path, file).await,
+        HunkSource::Working => Ok(git::get_working_file_diff(&path, file).await),
+    };
+    let diff = match diff {
+        Ok(d) => d,
+        Err(e) => return emap(e),
+    };
+    match crate::diff_hunks::build_selected_patch(&diff, &selected, reverse) {
+        Some(patch) => match apply_patch(&path, &patch, extra).await {
+            Ok(_) => ok(),
+            Err(e) => emap(e),
+        },
+        None => err("Selected lines no longer match."),
+    }
+}
+
 pub async fn dispatch(st: &AppState, name: &str, args: Vec<Value>) -> Value {
     match name {
         // ── browse / recent ──
@@ -331,6 +479,15 @@ pub async fn dispatch(st: &AppState, name: &str, args: Vec<Value>) -> Value {
             ok()
         }
         "workspace" => workspace(st).await,
+        // Cheap HEAD probe — the renderer compares it across repo:changed events
+        // to notify when a git op (incl. one run in the in-app terminal) moved HEAD.
+        "repoHead" => match require_active(st).await {
+            Ok((_, p)) => {
+                let info = git::get_repo_info(&p).await;
+                json!({ "head": info.head, "commit": info.commit })
+            }
+            Err(_) => json!({ "head": Value::Null, "commit": Value::Null }),
+        },
 
         // ── read-only queries ──
         "commitDetail" => read_repo(st, |p| {
@@ -452,6 +609,25 @@ pub async fn dispatch(st: &AppState, name: &str, args: Vec<Value>) -> Value {
         "checkoutBranch" => git_action(st, &["checkout", &arg_str(&args, 0)]).await,
         "checkoutCommit" => git_action(st, &["checkout", &arg_str(&args, 0)]).await,
         "mergeBranch" => git_action(st, &["merge", "--no-edit", &arg_str(&args, 0)]).await,
+        // Drag-drop combine: check out `target`, then merge/rebase `source` into it.
+        "mergeInto" => {
+            let (target, source) = (arg_str(&args, 0), arg_str(&args, 1));
+            run_locked(st, |p| async move {
+                git::run_git(&p, &["checkout", &target], &[]).await?;
+                git::run_git(&p, &["merge", "--no-edit", &source], &[]).await?;
+                Ok(())
+            })
+            .await
+        }
+        "rebaseOnto" => {
+            let (target, onto) = (arg_str(&args, 0), arg_str(&args, 1));
+            run_locked(st, |p| async move {
+                git::run_git(&p, &["checkout", &target], &[]).await?;
+                git::run_git(&p, &["rebase", &onto], &[]).await?;
+                Ok(())
+            })
+            .await
+        }
         "deleteBranch" => git_action(st, &["branch", "-d", &arg_str(&args, 0)]).await,
         "renameBranch" => {
             let (old, new) = (arg_str(&args, 0), arg_str(&args, 1));
@@ -634,8 +810,110 @@ pub async fn dispatch(st: &AppState, name: &str, args: Vec<Value>) -> Value {
             hunk_op(st, &arg_str(&args, 0), idx(&args, 1), HunkSource::Working, &["--cached"]).await
         }
 
+        // ── line-level ──
+        "applyLines" => {
+            line_op(st, &arg_str(&args, 0), parse_line_keys(args.get(1)), &arg_str(&args, 2)).await
+        }
+
         // ── interactive rebase ──
         "interactiveRebase" => interactive_rebase(st, &arg_str(&args, 0), args.get(1)).await,
+
+        // ── pull-request template (local repo file) ──
+        "prTemplate" => read_repo(st, |p| async move {
+            Ok(json!({ "body": read_pr_template(&p).await }))
+        })
+        .await,
+
+        // ── identity / signing config ──
+        "getConfig" => read_repo(st, |p| async move { Ok(read_identity(&p).await) }).await,
+        "setConfig" => set_identity(st, args.first()).await,
+
+        // ── undo (move HEAD back one reflog step; --keep aborts if it would
+        // clobber uncommitted work, so it's safe). Redo via the reflog view. ──
+        "undoLast" => git_action(st, &["reset", "--keep", "HEAD@{1}"]).await,
+
+        // ── git LFS ──
+        "lfsInfo" => read_repo(st, |p| async move { Ok(read_lfs(&p).await) }).await,
+        "lfsTrack" => git_action(st, &["lfs", "track", &arg_str(&args, 0)]).await,
+        "lfsUntrack" => git_action(st, &["lfs", "untrack", &arg_str(&args, 0)]).await,
+        "lfsPull" => git_action(st, &["lfs", "pull"]).await,
+
+        // ── file history ──
+        "fileHistory" => read_repo(st, |p| {
+            let file = arg_str(&args, 0);
+            async move {
+                git::get_file_history(&p, &file, 200)
+                    .await
+                    .map(|commits| json!({ "commits": to_val(commits) }))
+            }
+        })
+        .await,
+
+        // ── reflog ──
+        "reflog" => read_repo(st, |p| async move {
+            git::get_reflog(&p, 200).await.map(|entries| json!({ "entries": to_val(entries) }))
+        })
+        .await,
+
+        // ── submodules ──
+        "submodules" => read_repo(st, |p| async move {
+            git::get_submodules(&p).await.map(|items| json!({ "items": to_val(items) }))
+        })
+        .await,
+        "submoduleUpdate" => {
+            let sub = arg_opt_str(&args, 0).filter(|s| !s.trim().is_empty());
+            run_locked(st, |p| async move {
+                let mut a = vec!["submodule", "update", "--init", "--recursive"];
+                if let Some(ref s) = sub {
+                    a.push("--");
+                    a.push(s);
+                }
+                git::run_git(&p, &a, &[]).await?;
+                Ok(())
+            })
+            .await
+        }
+        "submoduleSync" => git_action(st, &["submodule", "sync", "--recursive"]).await,
+
+        // ── worktrees ──
+        "worktrees" => read_repo(st, |p| async move {
+            git::get_worktrees(&p, &p).await.map(|items| json!({ "items": to_val(items) }))
+        })
+        .await,
+        "worktreeAdd" => {
+            let (wpath, branch, new_branch) =
+                (arg_str(&args, 0), arg_opt_str(&args, 1), arg_bool(&args, 2));
+            if wpath.trim().is_empty() {
+                return err("Worktree path is required.");
+            }
+            run_locked(st, |p| async move {
+                let mut a = vec!["worktree".to_string(), "add".to_string()];
+                match branch.filter(|b| !b.trim().is_empty()) {
+                    Some(b) if new_branch => {
+                        a.push("-b".into());
+                        a.push(b);
+                        a.push(wpath);
+                    }
+                    Some(b) => {
+                        a.push(wpath);
+                        a.push(b);
+                    }
+                    None => a.push(wpath),
+                }
+                git::run_git(&p, &a, &[]).await?;
+                Ok(())
+            })
+            .await
+        }
+        "worktreeRemove" => {
+            let (wpath, force) = (arg_str(&args, 0), arg_bool(&args, 1));
+            if force {
+                git_action(st, &["worktree", "remove", "--force", &wpath]).await
+            } else {
+                git_action(st, &["worktree", "remove", &wpath]).await
+            }
+        }
+        "worktreePrune" => git_action(st, &["worktree", "prune"]).await,
 
         _ => err(format!("api:{name} not implemented")),
     }

@@ -131,12 +131,47 @@ export type UpdaterEvent =
   | { type: "available"; version: string }
   | { type: "not-available" }
   | { type: "progress"; percent: number }
-  | { type: "downloaded"; version: string }
-  | { type: "error"; message: string }
-  // Version-picker flow (download + launch a chosen release).
-  | { type: "picker-progress"; percent: number }
-  | { type: "picker-launched" }
-  | { type: "picker-error"; message: string };
+  | { type: "launched" }
+  | { type: "error"; message: string };
+
+export type ReflogEntry = {
+  sha: string;
+  short: string;
+  selector: string; // e.g. HEAD@{2}
+  message: string; // reflog subject, e.g. "commit: fix bug"
+  date: number;
+};
+
+export type Submodule = {
+  name: string;
+  path: string;
+  sha: string;
+  state: "ok" | "uninitialized" | "modified" | "conflict";
+  ref: string | null; // describe output
+};
+
+export type Worktree = {
+  path: string;
+  head: string;
+  branch: string | null;
+  isMain: boolean;
+  isCurrent: boolean;
+  locked: boolean;
+  prunable: boolean;
+  detached: boolean;
+};
+
+/** A changed line to act on: addition keyed by new-file line, deletion by old. */
+export type LineSelection = { add: boolean; line: number };
+
+/** Git identity + commit-signing config for the active repo. */
+export type GitIdentity = {
+  userName: string | null;
+  userEmail: string | null;
+  signingKey: string | null;
+  gpgFormat: string | null; // "openpgp" | "ssh" | "x509"
+  sign: boolean;
+};
 
 type Diff = { diff: string };
 type Err = { error: string };
@@ -155,6 +190,8 @@ export interface Api {
   ): Promise<ActionState>;
   closeRepo(): Promise<ActionState>;
   workspace(): Promise<WorkspaceData | Err>;
+  /** Current branch + short commit; cheap probe for change notifications. */
+  repoHead(): Promise<{ head: string | null; commit: string | null }>;
   commitDetail(sha: string): Promise<CommitDetail | Err>;
   commitFileDiff(sha: string, file: string): Promise<Diff | Err>;
   commitFileImage(sha: string, file: string): Promise<ImageDiff | Err>;
@@ -180,6 +217,10 @@ export interface Api {
   checkoutBranch(name: string): Promise<ActionState>;
   checkoutCommit(sha: string): Promise<ActionState>;
   mergeBranch(name: string): Promise<ActionState>;
+  /** Check out `target`, then merge `source` into it (drag-drop combine). */
+  mergeInto(target: string, source: string): Promise<ActionState>;
+  /** Check out `target`, then rebase it onto `onto` (drag-drop combine). */
+  rebaseOnto(target: string, onto: string): Promise<ActionState>;
   deleteBranch(name: string): Promise<ActionState>;
   renameBranch(oldName: string, newName: string): Promise<ActionState>;
   deleteRemoteBranch(remote: string, branch: string): Promise<ActionState>;
@@ -213,30 +254,48 @@ export interface Api {
     base: string,
     ops: Record<string, RebaseOp>,
   ): Promise<ActionState>;
+  /** The repo's PULL_REQUEST_TEMPLATE (empty string if none). */
+  prTemplate(): Promise<{ body: string } | Err>;
+  /** Read the repo's effective identity + signing config. */
+  getConfig(): Promise<GitIdentity | Err>;
+  /** Write identity + signing fields to the repo's local config. */
+  setConfig(identity: GitIdentity): Promise<ActionState>;
+  /** Undo the last operation (move HEAD back one reflog step, keeping work). */
+  undoLast(): Promise<ActionState>;
+  /** git-lfs availability + tracked patterns. */
+  lfsInfo(): Promise<{ installed: boolean; patterns: string[] } | Err>;
+  lfsTrack(pattern: string): Promise<ActionState>;
+  lfsUntrack(pattern: string): Promise<ActionState>;
+  lfsPull(): Promise<ActionState>;
+  /** Stage/unstage/discard a chosen subset of a file's changed lines. */
+  applyLines(
+    file: string,
+    lines: LineSelection[],
+    mode: "stage" | "unstage" | "discard",
+  ): Promise<ActionState>;
+  fileHistory(file: string): Promise<{ commits: Commit[] } | Err>;
+  reflog(): Promise<{ entries: ReflogEntry[] } | Err>;
+  submodules(): Promise<{ items: Submodule[] } | Err>;
+  submoduleUpdate(path?: string): Promise<ActionState>;
+  submoduleSync(): Promise<ActionState>;
+  worktrees(): Promise<{ items: Worktree[] } | Err>;
+  worktreeAdd(
+    path: string,
+    branch?: string,
+    newBranch?: boolean,
+  ): Promise<ActionState>;
+  worktreeRemove(path: string, force?: boolean): Promise<ActionState>;
+  worktreePrune(): Promise<ActionState>;
   /** Fired when the active repo's files change on disk (debounced). */
   onRepoChange(cb: () => void): () => void;
 }
 
-export type Release = {
-  version: string; // e.g. "2.0.0"
-  tag: string; // e.g. "v2.0.0"
-  assetUrl: string | null; // installer download for this OS, or null
-  pageUrl: string; // GitHub release page (fallback)
-  prerelease: boolean;
-  current: boolean; // matches the running app version
-};
-
 export interface Updater {
+  /** Check for a newer release; emits "available" / "not-available". */
   check(): Promise<void>;
+  /** Download the newest matching installer and launch it (progress via onEvent). */
   download(): Promise<void>;
-  install(): Promise<void>;
   onEvent(cb: (e: UpdaterEvent) => void): () => void;
-  /** All published releases with this OS's installer asset (newest first). */
-  listReleases(): Promise<Release[]>;
-  /** Open a download URL in the OS browser (fallback when no installer asset). */
-  openDownload(url: string): Promise<void>;
-  /** Download a release's installer and launch it (progress via onEvent). */
-  downloadVersion(url: string): Promise<void>;
 }
 
 // ── GitHub (PR management) ───────────────────────────────────────────────────
@@ -361,6 +420,7 @@ export interface Github {
     head: string,
     base: string,
     reviewers: string[],
+    draft?: boolean,
   ): Promise<ActionState>;
   listCollaborators(): Promise<Collaborator[] | Err>;
   listIssues(): Promise<GithubIssue[] | Err>;

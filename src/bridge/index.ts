@@ -12,14 +12,55 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { API_CHANNELS } from "@shared/channels";
 import type { Api, Github, Updater } from "@shared/types";
+import { echoCommand } from "@/lib/terminal-bus";
 
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
+
+// Map mutating api methods → the git command they run, so "Sync with UI" can
+// echo it into the terminal. Read-only/non-git methods are absent (no echo).
+const CMD: Record<string, (a: unknown[]) => string> = {
+  gitFetch: () => "git fetch --all --prune",
+  gitPull: () => "git pull",
+  gitPush: () => "git push",
+  gitPushForce: () => "git push --force-with-lease",
+  gitPushSetUpstream: () => "git push -u origin HEAD",
+  fetchTags: () => "git fetch origin --tags",
+  stageFile: (a) => `git add -- ${a[0]}`,
+  stageAll: () => "git add --all",
+  unstageFile: (a) => `git restore --staged -- ${a[0]}`,
+  unstageAll: () => "git reset",
+  discardFile: (a) => `git restore -- ${a[0]}`,
+  commit: (a) => `git commit -m "${a[0]}"`,
+  amendCommit: () => "git commit --amend",
+  checkoutBranch: (a) => `git checkout ${a[0]}`,
+  checkoutCommit: (a) => `git checkout ${a[0]}`,
+  mergeBranch: (a) => `git merge --no-edit ${a[0]}`,
+  mergeInto: (a) => `git checkout ${a[0]} && git merge --no-edit ${a[1]}`,
+  rebaseOnto: (a) => `git checkout ${a[0]} && git rebase ${a[1]}`,
+  createBranch: (a) => `git switch -c ${a[0]}`,
+  deleteBranch: (a) => `git branch -d ${a[0]}`,
+  renameBranch: (a) => `git branch -m ${a[0]} ${a[1]}`,
+  cherryPick: (a) => `git cherry-pick ${a[0]}`,
+  revertCommit: (a) => `git revert --no-edit ${a[0]}`,
+  resetToCommit: (a) => `git reset --${a[1]} ${a[0]}`,
+  createTagAt: (a) => `git tag ${a[0]} ${a[1]}`,
+  deleteTag: (a) => `git tag -d ${a[0]}`,
+  stashPush: () => "git stash push --include-untracked",
+  stashApply: (a) => `git stash apply ${a[0]}`,
+  stashPop: (a) => `git stash pop ${a[0]}`,
+  stashDrop: (a) => `git stash drop ${a[0]}`,
+  undoLast: () => "git reset --keep HEAD@{1}",
+  submoduleUpdate: () => "git submodule update --init --recursive",
+  lfsPull: () => "git lfs pull",
+};
 
 /** A method that forwards positional args to a Rust namespace dispatcher. */
 const call =
   (dispatcher: string, name: string): AnyFn =>
-  (...args: unknown[]) =>
-    invoke(dispatcher, { name, args });
+  (...args: unknown[]) => {
+    if (dispatcher === "api_call" && CMD[name]) echoCommand(CMD[name](args));
+    return invoke(dispatcher, { name, args });
+  };
 
 /** Subscribe to a backend event; returns an unlisten fn (sync, like the old bridge). */
 function subscribe<T>(event: string, cb: (payload: T) => void): () => void {
@@ -59,14 +100,7 @@ for (const name of GH_METHODS) github[name] = call("gh_call", name);
 github.onAuth = (cb: (status: unknown) => void) => subscribe("gh:auth", cb);
 
 // window.updater
-const UPDATER_METHODS = [
-  "check",
-  "download",
-  "install",
-  "listReleases",
-  "openDownload",
-  "downloadVersion",
-] as const;
+const UPDATER_METHODS = ["check", "download"] as const;
 const updater: Record<string, unknown> = {};
 for (const name of UPDATER_METHODS) updater[name] = call("updater_call", name);
 updater.onEvent = (cb: (e: unknown) => void) => subscribe("updater:event", cb);

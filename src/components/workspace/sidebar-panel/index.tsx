@@ -25,9 +25,12 @@ import type { Branch, Remote, Stash, Tag } from "@/lib/git";
 import { notify } from "@/lib/notify";
 import { BranchRow, ICON } from "./branch-row";
 import { NewRemoteBranchDialog } from "./new-remote-branch-dialog";
+import { LfsSection } from "./lfs-section";
 import { Section } from "./section";
 import { StashRow } from "./stash-row";
+import { SubmoduleSection } from "./submodule-section";
 import { TagRow } from "./tag-row";
+import { WorktreeSection } from "./worktree-section";
 
 type Props = {
   branches: Branch[];
@@ -216,6 +219,12 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
               <StashRow key={s.ref} stash={s} />
             ))}
           </Section>
+
+          <SubmoduleSection />
+
+          <WorktreeSection />
+
+          <LfsSection />
         </div>
       </ScrollArea>
 

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ export function CreatePrDialog({
   const [head, setHead] = useState("");
   const [base, setBase] = useState("");
   const [reviewers, setReviewers] = useState<string[]>([]);
+  const [draft, setDraft] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -59,7 +61,13 @@ export function CreatePrDialog({
       setBody("");
       setHead("");
       setReviewers([]);
+      setDraft(false);
       setBase(names.find((n) => n === "main" || n === "master") ?? names[0] ?? "");
+      // Prefill the description from the repo's PR template, if any. Don't clobber
+      // text the user has already typed (body stays empty until this resolves).
+      window.api.prTemplate().then((r) => {
+        if (!("error" in r) && r.body.trim()) setBody((b) => b || r.body);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -80,6 +88,7 @@ export function CreatePrDialog({
       head,
       base,
       reviewers,
+      draft,
     );
     setBusy(false);
     notify(res, "Pull request created");
@@ -216,6 +225,17 @@ export function CreatePrDialog({
             </div>
           ) : null}
 
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="pr-draft"
+              checked={draft}
+              onCheckedChange={(v) => setDraft(v === true)}
+            />
+            <Label htmlFor="pr-draft" className="font-normal text-muted-foreground">
+              Create as draft
+            </Label>
+          </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -228,7 +248,7 @@ export function CreatePrDialog({
               type="submit"
               disabled={busy || !title.trim() || !head || !base || head === base}
             >
-              Create
+              {draft ? "Create draft" : "Create"}
             </Button>
           </DialogFooter>
         </form>

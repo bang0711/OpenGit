@@ -440,9 +440,9 @@ async fn review_pr(st: &AppState, n: i64, event: &str, body: &str) -> Result<(),
     Ok(())
 }
 
-async fn create_pr(st: &AppState, title: &str, body: &str, head: &str, base: &str, reviewers: Vec<String>) -> Result<(), String> {
+async fn create_pr(st: &AppState, title: &str, body: &str, head: &str, base: &str, draft: bool, reviewers: Vec<String>) -> Result<(), String> {
     let (owner, repo) = gh_context(st).await?;
-    let pr = gh_fetch(st, &format!("/repos/{owner}/{repo}/pulls"), Method::POST, Some(json!({ "title": title, "body": body, "head": head, "base": base }))).await?;
+    let pr = gh_fetch(st, &format!("/repos/{owner}/{repo}/pulls"), Method::POST, Some(json!({ "title": title, "body": body, "head": head, "base": base, "draft": draft }))).await?;
     if !reviewers.is_empty() {
         let n = pr.get("number").and_then(Value::as_i64).unwrap_or(0);
         gh_fetch(st, &format!("/repos/{owner}/{repo}/pulls/{n}/requested_reviewers"), Method::POST, Some(json!({ "reviewers": reviewers }))).await?;
@@ -502,7 +502,8 @@ pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Valu
                 .and_then(Value::as_array)
                 .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
                 .unwrap_or_default();
-            act(create_pr(st, &s(&args, 0), &s(&args, 1), &s(&args, 2), &s(&args, 3), reviewers).await)
+            let draft = args.get(5).and_then(Value::as_bool).unwrap_or(false);
+            act(create_pr(st, &s(&args, 0), &s(&args, 1), &s(&args, 2), &s(&args, 3), draft, reviewers).await)
         }
         "listCollaborators" => read(list_collaborators(st).await),
         "listIssues" => read(list_issues(st).await),

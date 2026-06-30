@@ -7,6 +7,7 @@ import {
   RiGitMergeLine,
   RiLoader4Line,
 } from "@remixicon/react";
+import { ActionTooltip } from "@/components/action-tooltip";
 import Link from "@/lib/link";
 import { useRouter } from "@/lib/router";
 import { useEffect, useState, useTransition } from "react";
@@ -109,21 +110,21 @@ export function ConflictResolver({
             <ScrollArea className="inset-0 h-full">
               <div className="py-1 text-xs">
                 {files.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setSelected(f)}
-                    title={f}
-                    className={cn(
-                      "flex w-full items-center gap-1.5 px-3 py-1 text-left",
-                      f === selected
-                        ? "bg-primary/15 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/60",
-                    )}
-                  >
-                    <RiGitMergeLine className="size-3.5 shrink-0 text-amber-500" />
-                    <span className="truncate">{f}</span>
-                  </button>
+                  <ActionTooltip key={f} label={f} side="right">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(f)}
+                      className={cn(
+                        "flex w-full items-center gap-1.5 px-3 py-1 text-left",
+                        f === selected
+                          ? "bg-primary/15 text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60",
+                      )}
+                    >
+                      <RiGitMergeLine className="size-3.5 shrink-0 text-amber-500" />
+                      <span className="truncate">{f}</span>
+                    </button>
+                  </ActionTooltip>
                 ))}
               </div>
             </ScrollArea>

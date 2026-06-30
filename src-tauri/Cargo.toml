@@ -25,6 +25,7 @@ notify = "7"
 sha2 = "0.10"
 dirs = "5"
 base64 = "0.22"
+portable-pty = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

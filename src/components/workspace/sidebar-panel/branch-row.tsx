@@ -17,6 +17,8 @@ import {
   deleteBranch,
   deleteRemoteBranch,
   mergeBranch,
+  mergeInto,
+  rebaseOnto,
   renameBranch,
 } from "@/app/actions";
 import { ActionTooltip } from "@/components/action-tooltip";
@@ -45,6 +47,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Branch } from "@/lib/git";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -74,6 +81,9 @@ export function BranchRow({
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(branch.name);
   const [deleteRemoteOpen, setDeleteRemoteOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  // The branch dropped onto this one (drag-drop combine), or null.
+  const [dropFrom, setDropFrom] = useState<string | null>(null);
   // Show the leaf name; the remote prefix is already shown as a group header.
   const display = remote
     ? branch.name.split("/").slice(1).join("/")
@@ -173,15 +183,38 @@ export function BranchRow({
 
   return (
     <>
+      <Tooltip>
       <ContextMenu>
         <ContextMenuTrigger asChild>
+          <TooltipTrigger asChild>
           <div
-            title={`${branch.name} @ ${branch.sha}\n${branch.subject}`}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData("application/x-opengit-branch", branch.name);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              const from = e.dataTransfer.types.includes(
+                "application/x-opengit-branch",
+              );
+              if (from) {
+                e.preventDefault();
+                setDragOver(true);
+              }
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const src = e.dataTransfer.getData("application/x-opengit-branch");
+              if (src && src !== branch.name) setDropFrom(src);
+            }}
             className={cn(
               "group/branch flex items-center gap-1.5 rounded-md py-0.5 pr-1 pl-6 text-xs",
               branch.isCurrent
                 ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                 : "hover:bg-sidebar-accent",
+              dragOver && "ring-1 ring-primary ring-inset",
             )}
           >
             <button
@@ -242,6 +275,7 @@ export function BranchRow({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          </TooltipTrigger>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-48">
           {actions.map((a) => (
@@ -259,6 +293,15 @@ export function BranchRow({
           ))}
         </ContextMenuContent>
       </ContextMenu>
+        <TooltipContent side="right">
+          <div className="font-mono">
+            {branch.name} @ {branch.sha}
+          </div>
+          {branch.subject ? (
+            <div className="text-muted-foreground">{branch.subject}</div>
+          ) : null}
+        </TooltipContent>
+      </Tooltip>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -304,6 +347,58 @@ export function BranchRow({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={dropFrom !== null}
+        onOpenChange={(o) => !o && setDropFrom(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Combine branches</DialogTitle>
+            <DialogDescription>
+              Bring{" "}
+              <span className="font-semibold text-foreground">{dropFrom}</span>{" "}
+              into{" "}
+              <span className="font-semibold text-foreground">
+                {branch.name}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-start">
+            <Button
+              disabled={pending}
+              onClick={() => {
+                const from = dropFrom;
+                setDropFrom(null);
+                if (from)
+                  run(
+                    () => mergeInto(branch.name, from),
+                    `Merged ${from} into ${branch.name}`,
+                  );
+              }}
+            >
+              <RiGitMergeLine className="mr-1 size-3.5" />
+              Merge
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                const from = dropFrom;
+                setDropFrom(null);
+                if (from)
+                  run(
+                    () => rebaseOnto(branch.name, from),
+                    `Rebased ${branch.name} onto ${from}`,
+                  );
+              }}
+            >
+              Rebase onto
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

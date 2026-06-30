@@ -183,8 +183,25 @@ on their runners, uploads to a draft Release, and once all three succeed flips i
 to **published** (no partial releases). Set the repo/org Actions variable
 `OPENGIT_GH_CLIENT_ID` so released installers ship with one-click login.
 
-CI builds are **unsigned** — users see SmartScreen / Gatekeeper warnings until
-the app is code-signed.
+### Code signing (Windows)
+
+CI builds are **unsigned by default** — users see SmartScreen warnings (and
+managed/corporate machines may block them outright). To sign, add two repo
+**Actions secrets** and the release/build workflows sign the exe + NSIS
+installer automatically (skipped when the secret is absent):
+
+| Secret | Value |
+|--------|-------|
+| `WINDOWS_CERTIFICATE` | your code-signing cert as a **base64-encoded `.pfx`** |
+| `WINDOWS_CERTIFICATE_PASSWORD` | the `.pfx` password |
+
+Encode the cert: `base64 -w0 cert.pfx` (or PowerShell
+`[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))`), paste the
+output as the `WINDOWS_CERTIFICATE` secret. The workflow imports it, reads the
+thumbprint, and injects it into `tauri.conf.json` at build time (timestamp via
+DigiCert, SHA-256). Use an **EV / OV** cert (or Azure Trusted Signing) for
+SmartScreen reputation; self-signed satisfies the bundler but browsers still
+warn. macOS/Linux are unaffected.
 
 ## Scripts
 

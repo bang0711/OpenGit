@@ -9,6 +9,9 @@ export function Cell({
   sign,
   lang,
   className,
+  selectable,
+  selected,
+  onToggle,
 }: {
   no: number | null;
   text: string | null;
@@ -16,17 +19,24 @@ export function Cell({
   sign: string;
   lang?: string;
   className?: string;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
 }) {
   const empty = text === null;
   // Re-render once the lazy grammar chunk loads so highlighting upgrades in.
   const ready = useGrammarsReady();
+  const pickable = selectable && !empty && tone !== "ctx";
   return (
     <div
+      onClick={pickable ? onToggle : undefined}
       className={cn(
         "flex min-w-0",
         empty && "bg-muted/30",
         tone === "add" && "bg-green-500/10",
         tone === "del" && "bg-red-500/10",
+        pickable && "cursor-pointer hover:brightness-110",
+        selected && "ring-1 ring-inset ring-primary brightness-110",
         className,
       )}
     >

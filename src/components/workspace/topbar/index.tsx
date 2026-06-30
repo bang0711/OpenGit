@@ -2,13 +2,17 @@
 
 import {
   RiArrowDownLine,
+  RiArrowGoBackLine,
   RiArrowUpLine,
   RiCloseLine,
   RiDownloadCloud2Line,
   RiGitBranchLine,
   RiGitPullRequestLine,
+  RiHistoryLine,
+  RiSettings3Line,
+  RiTerminalBoxLine,
 } from "@remixicon/react";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   type ActionState,
   closeRepo,
@@ -18,9 +22,13 @@ import {
   gitPushForce,
   gitPushSetUpstream,
   mergeBranch,
+  undoLast,
 } from "@/app/actions";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { GitLogo } from "@/components/git-logo";
+import { RepoSettingsDialog } from "@/components/repo-settings-dialog";
+import { toggleTerminal } from "@/components/terminal-panel";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "@/lib/link";
 import { useRouter } from "@/lib/router";
 import { UpdateChecker } from "@/components/update-checker";
@@ -46,6 +54,7 @@ type Props = {
 
 export function Topbar({ repo, current, branches }: Props) {
   const [pending, startTransition] = useTransition();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const run = (action: () => Promise<ActionState>, success: string) => {
     startTransition(async () => {
@@ -127,6 +136,25 @@ export function Topbar({ repo, current, branches }: Props) {
 
         <Separator orientation="vertical" className="mx-1 !h-5" />
 
+        <ActionTooltip label="Undo last action (redo via Reflog)">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={pending}
+            onClick={() => run(() => undoLast(), "Undone")}
+          >
+            <RiArrowGoBackLine />
+          </Button>
+        </ActionTooltip>
+
+        <ActionTooltip label="Reflog (HEAD history)">
+          <Button asChild variant="ghost" size="icon">
+            <Link href="/reflog">
+              <RiHistoryLine />
+            </Link>
+          </Button>
+        </ActionTooltip>
+
         <ActionTooltip label="Pull requests, issues & collaborators">
           <Button asChild variant="ghost" size="sm">
             <Link href="/github">
@@ -138,6 +166,24 @@ export function Topbar({ repo, current, branches }: Props) {
 
         <UpdateChecker />
 
+        <ActionTooltip label="Toggle terminal">
+          <Button variant="ghost" size="icon" onClick={toggleTerminal}>
+            <RiTerminalBoxLine />
+          </Button>
+        </ActionTooltip>
+
+        <ActionTooltip label="Identity & signing">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <RiSettings3Line />
+          </Button>
+        </ActionTooltip>
+
+        <ThemeToggle />
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" onClick={close}>
@@ -147,6 +193,8 @@ export function Topbar({ repo, current, branches }: Props) {
           <TooltipContent>Close repository</TooltipContent>
         </Tooltip>
       </div>
+
+      <RepoSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   );
 }

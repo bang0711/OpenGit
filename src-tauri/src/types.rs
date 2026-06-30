@@ -130,6 +130,40 @@ pub struct RebaseCommit {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReflogEntry {
+    pub sha: String,
+    pub short: String,
+    pub selector: String, // e.g. HEAD@{2}
+    pub message: String,  // reflog subject, e.g. "commit: fix bug"
+    pub date: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Submodule {
+    pub name: String,
+    pub path: String,
+    pub sha: String,
+    pub state: String, // "ok" | "uninitialized" | "modified" | "conflict"
+    #[serde(rename = "ref")]
+    pub describe: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    pub path: String,
+    pub head: String,
+    pub branch: Option<String>,
+    pub is_main: bool,
+    pub is_current: bool,
+    pub locked: bool,
+    pub prunable: bool,
+    pub detached: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DirEntry {
     pub name: String,
     pub path: String,

@@ -35,6 +35,22 @@ export const router = createHashRouter([
     },
   },
   {
+    path: "/reflog",
+    errorElement,
+    lazy: async () => {
+      const m = await import("./routes/reflog");
+      return { Component: m.Reflog, loader: m.reflogLoader };
+    },
+  },
+  {
+    path: "/file-history",
+    errorElement,
+    lazy: async () => {
+      const m = await import("./routes/file-history");
+      return { Component: m.FileHistory, loader: m.fileHistoryLoader };
+    },
+  },
+  {
     path: "/github",
     errorElement,
     lazy: async () => {

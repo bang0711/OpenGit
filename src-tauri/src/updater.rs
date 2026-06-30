@@ -106,7 +106,7 @@ async fn download_and_run(app: &AppHandle, st: &AppState, url: &str) -> Result<(
         out.write_all(&chunk).await.map_err(|e| e.to_string())?;
         received += chunk.len() as u64;
         if total > 0 {
-            emit(app, json!({ "type": "picker-progress", "percent": (received * 100 / total) }));
+            emit(app, json!({ "type": "progress", "percent": (received * 100 / total) }));
         }
     }
     out.flush().await.map_err(|e| e.to_string())?;
@@ -119,7 +119,7 @@ async fn download_and_run(app: &AppHandle, st: &AppState, url: &str) -> Result<(
 async fn install_downloaded(app: &AppHandle, file: &str) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_path(file, None::<&str>).map_err(|e| e.to_string())?;
-    emit(app, json!({ "type": "picker-launched" }));
+    emit(app, json!({ "type": "launched" }));
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
@@ -134,7 +134,7 @@ async fn install_downloaded(app: &AppHandle, file: &str) -> Result<(), String> {
     if let Ok(target) = std::env::var("APPIMAGE") {
         std::fs::copy(file, &target).map_err(|e| e.to_string())?;
         let _ = std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755));
-        emit(app, json!({ "type": "picker-launched" }));
+        emit(app, json!({ "type": "launched" }));
         let _ = std::process::Command::new(&target).spawn();
         let app2 = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -145,7 +145,7 @@ async fn install_downloaded(app: &AppHandle, file: &str) -> Result<(), String> {
         let _ = std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o755));
         use tauri_plugin_opener::OpenerExt;
         app.opener().open_path(file, None::<&str>).map_err(|e| e.to_string())?;
-        emit(app, json!({ "type": "picker-launched" }));
+        emit(app, json!({ "type": "launched" }));
     }
     Ok(())
 }
@@ -157,13 +157,12 @@ async fn install_downloaded(app: &AppHandle, file: &str) -> Result<(), String> {
 async fn install_downloaded(app: &AppHandle, file: &str) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_path(file, None::<&str>).map_err(|e| e.to_string())?;
-    emit(app, json!({ "type": "picker-launched" }));
+    emit(app, json!({ "type": "launched" }));
     Ok(())
 }
 
-pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
+pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, _args: Vec<Value>) -> Value {
     match name {
-        "releases" => Value::Array(fetch_releases(st, app).await),
         "check" => {
             let current = current_version(app);
             let releases = fetch_releases(st, app).await;
@@ -198,22 +197,6 @@ pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Valu
                 }
             } else {
                 emit(app, json!({ "type": "not-available" }));
-            }
-            Value::Null
-        }
-        "install" => Value::Null, // download already launches the installer
-        "openDownload" => {
-            use tauri_plugin_opener::OpenerExt;
-            if let Some(url) = args.first().and_then(Value::as_str) {
-                let _ = app.opener().open_url(url, None::<&str>);
-            }
-            Value::Null
-        }
-        "downloadVersion" => {
-            if let Some(url) = args.first().and_then(Value::as_str) {
-                if let Err(e) = download_and_run(app, st, url).await {
-                    emit(app, json!({ "type": "picker-error", "message": e }));
-                }
             }
             Value::Null
         }

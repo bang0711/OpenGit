@@ -10,6 +10,9 @@ export function Row({
   hunkIndex = 0,
   onStage,
   onRevert,
+  selectable,
+  selectedKeys,
+  onToggleLine,
 }: {
   row: DiffRow;
   cols: React.CSSProperties;
@@ -17,6 +20,9 @@ export function Row({
   hunkIndex?: number;
   onStage?: (index: number) => void;
   onRevert?: (index: number) => void;
+  selectable?: boolean;
+  selectedKeys?: Set<string>;
+  onToggleLine?: (key: string) => void;
 }) {
   if (row.type === "hunk") {
     return (
@@ -51,6 +57,8 @@ export function Row({
       </div>
     );
   }
+  const delKey = row.leftNo !== null ? `d:${row.leftNo}` : null;
+  const addKey = row.rightNo !== null ? `a:${row.rightNo}` : null;
   return (
     <div className="grid" style={cols}>
       <Cell
@@ -60,6 +68,9 @@ export function Row({
         sign={row.leftDel ? "-" : " "}
         lang={lang}
         className="border-border border-r"
+        selectable={selectable && row.leftDel}
+        selected={delKey ? selectedKeys?.has(delKey) : false}
+        onToggle={delKey ? () => onToggleLine?.(delKey) : undefined}
       />
       <Cell
         no={row.rightNo}
@@ -67,6 +78,9 @@ export function Row({
         tone={row.rightAdd ? "add" : "ctx"}
         sign={row.rightAdd ? "+" : " "}
         lang={lang}
+        selectable={selectable && row.rightAdd}
+        selected={addKey ? selectedKeys?.has(addKey) : false}
+        onToggle={addKey ? () => onToggleLine?.(addKey) : undefined}
       />
     </div>
   );

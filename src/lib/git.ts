@@ -11,8 +11,11 @@ export type {
   GitResult,
   MergeState,
   RebaseCommit,
+  ReflogEntry,
   Remote,
   RepoInfo,
   Stash,
+  Submodule,
   Tag,
+  Worktree,
 } from "@shared/types";

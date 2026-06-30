@@ -2,6 +2,7 @@
 
 import type { PrFile } from "@shared/types";
 import { useState } from "react";
+import { ActionTooltip } from "@/components/action-tooltip";
 import { DiffStat } from "@/components/shared/diff-stat";
 import { FileIcon } from "@/components/shared/file-icon";
 import { splitRepoPath } from "@/lib/repo-path";
@@ -54,11 +55,10 @@ export function FilesChanged({
             const { name, location } = splitRepoPath(f.path);
             const dir = location === f.path ? "" : location;
             return (
+              <ActionTooltip key={f.path} label={f.path} side="right">
               <button
-                key={f.path}
                 type="button"
                 onClick={() => setSel(f.path)}
-                title={f.path}
                 className={cn(
                   "flex w-full items-center gap-1.5 px-2 py-1 text-left text-[0.7rem] transition-colors",
                   f.path === file?.path ? "bg-primary/10" : "hover:bg-muted/40",
@@ -85,6 +85,7 @@ export function FilesChanged({
                   <DiffStat adds={f.additions} dels={f.deletions} />
                 </span>
               </button>
+              </ActionTooltip>
             );
           })}
           <ScrollBar orientation="horizontal" />

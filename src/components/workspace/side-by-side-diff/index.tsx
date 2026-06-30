@@ -22,6 +22,9 @@ export function SideBySideDiff({
   lang,
   onStageHunk,
   onRevertHunk,
+  selectable,
+  selectedKeys,
+  onToggleLine,
 }: {
   rows: DiffRow[];
   oldLabel: string;
@@ -31,6 +34,9 @@ export function SideBySideDiff({
   lang?: string;
   onStageHunk?: (index: number) => void;
   onRevertHunk?: (index: number) => void;
+  selectable?: boolean;
+  selectedKeys?: Set<string>;
+  onToggleLine?: (key: string) => void;
 }) {
   const [leftPct, setLeftPct] = usePersistedState("opengit.diffSplit", 50);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -117,6 +123,9 @@ export function SideBySideDiff({
                   hunkIndex={Math.max(0, hunkIndexByRow[vi.index])}
                   onStage={onStageHunk}
                   onRevert={onRevertHunk}
+                  selectable={selectable}
+                  selectedKeys={selectedKeys}
+                  onToggleLine={onToggleLine}
                 />
               </div>
             ))}

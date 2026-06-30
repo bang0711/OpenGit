@@ -364,20 +364,9 @@ pub async fn get_status(path: &str) -> Result<Vec<FileStatus>, GitError> {
     Ok(files)
 }
 
-pub async fn get_commits(path: &str, limit: u32) -> Result<Vec<Commit>, GitError> {
-    let format = ["%H", "%h", "%P", "%an", "%ae", "%at", "%s", "%D"].join(&FS.to_string());
-    let out = run_git(
-        path,
-        &[
-            "log",
-            "--all",
-            &format!("--max-count={limit}"),
-            "--date-order",
-            &format!("--pretty=format:{format}{RS}"),
-        ],
-        &[],
-    )
-    .await?;
+const COMMIT_FORMAT: [&str; 8] = ["%H", "%h", "%P", "%an", "%ae", "%at", "%s", "%D"];
+
+fn parse_commits(out: &str) -> Vec<Commit> {
     let mut commits = Vec::new();
     for record in out.split(RS) {
         let line = record.strip_prefix('\n').unwrap_or(record);
@@ -403,7 +392,149 @@ pub async fn get_commits(path: &str, limit: u32) -> Result<Vec<Commit>, GitError
             },
         });
     }
-    Ok(commits)
+    commits
+}
+
+pub async fn get_commits(path: &str, limit: u32) -> Result<Vec<Commit>, GitError> {
+    let format = COMMIT_FORMAT.join(&FS.to_string());
+    let out = run_git(
+        path,
+        &[
+            "log",
+            "--all",
+            &format!("--max-count={limit}"),
+            "--date-order",
+            &format!("--pretty=format:{format}{RS}"),
+        ],
+        &[],
+    )
+    .await?;
+    Ok(parse_commits(&out))
+}
+
+/// History of a single file, following renames (newest first).
+pub async fn get_file_history(path: &str, file: &str, limit: u32) -> Result<Vec<Commit>, GitError> {
+    let format = COMMIT_FORMAT.join(&FS.to_string());
+    let out = run_git(
+        path,
+        &[
+            "log",
+            "--follow",
+            &format!("--max-count={limit}"),
+            "--date-order",
+            &format!("--pretty=format:{format}{RS}"),
+            "--",
+            file,
+        ],
+        &[],
+    )
+    .await?;
+    Ok(parse_commits(&out))
+}
+
+/// HEAD reflog (ref movements), newest first.
+pub async fn get_reflog(path: &str, limit: u32) -> Result<Vec<ReflogEntry>, GitError> {
+    let format = ["%H", "%h", "%gd", "%gs", "%at"].join(&FS.to_string());
+    let out = run_git(
+        path,
+        &["reflog", &format!("--max-count={limit}"), &format!("--format={format}")],
+        &[],
+    )
+    .await?;
+    Ok(out
+        .split('\n')
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| {
+            let p: Vec<&str> = l.split(FS).collect();
+            if p.len() < 5 {
+                return None;
+            }
+            Some(ReflogEntry {
+                sha: p[0].to_string(),
+                short: p[1].to_string(),
+                selector: p[2].to_string(),
+                message: p[3].to_string(),
+                date: p[4].parse().unwrap_or(0),
+            })
+        })
+        .collect())
+}
+
+/// Submodules with init/modified/conflict state from `git submodule status`.
+pub async fn get_submodules(path: &str) -> Result<Vec<Submodule>, GitError> {
+    let out = run_git(path, &["submodule", "status", "--recursive"], &[]).await?;
+    let mut subs = Vec::new();
+    for line in out.split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let (state, rest) = match line.chars().next() {
+            Some('-') => ("uninitialized", &line[1..]),
+            Some('+') => ("modified", &line[1..]),
+            Some('U') => ("conflict", &line[1..]),
+            Some(' ') => ("ok", &line[1..]),
+            _ => ("ok", line),
+        };
+        let mut it = rest.splitn(3, ' ');
+        let sha = it.next().unwrap_or("").to_string();
+        let p = it.next().unwrap_or("").to_string();
+        let describe = it
+            .next()
+            .map(|d| d.trim().trim_start_matches('(').trim_end_matches(')').to_string())
+            .filter(|d| !d.is_empty());
+        subs.push(Submodule {
+            name: basename(&p),
+            path: p,
+            sha,
+            state: state.to_string(),
+            describe,
+        });
+    }
+    Ok(subs)
+}
+
+/// Linked worktrees from `git worktree list --porcelain`.
+pub async fn get_worktrees(path: &str, current: &str) -> Result<Vec<Worktree>, GitError> {
+    let out = run_git(path, &["worktree", "list", "--porcelain"], &[]).await?;
+    let mut trees: Vec<Worktree> = Vec::new();
+    let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_lowercase();
+    let cur = norm(current);
+    for record in out.split("\n\n") {
+        if record.trim().is_empty() {
+            continue;
+        }
+        let mut wt = Worktree {
+            path: String::new(),
+            head: String::new(),
+            branch: None,
+            is_main: trees.is_empty(),
+            is_current: false,
+            locked: false,
+            prunable: false,
+            detached: false,
+        };
+        for line in record.split('\n') {
+            if let Some(p) = line.strip_prefix("worktree ") {
+                wt.path = p.to_string();
+            } else if let Some(h) = line.strip_prefix("HEAD ") {
+                wt.head = h.to_string();
+            } else if let Some(b) = line.strip_prefix("branch ") {
+                wt.branch = Some(b.trim_start_matches("refs/heads/").to_string());
+            } else if line == "detached" {
+                wt.detached = true;
+            } else if line.starts_with("locked") {
+                wt.locked = true;
+            } else if line.starts_with("prunable") {
+                wt.prunable = true;
+            }
+        }
+        if wt.path.is_empty() {
+            continue;
+        }
+        wt.is_current = norm(&wt.path) == cur;
+        trees.push(wt);
+    }
+    Ok(trees)
 }
 
 fn split_ws(s: &str) -> Vec<String> {

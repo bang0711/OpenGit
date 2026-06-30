@@ -1,9 +1,14 @@
 "use client";
 
-import { RiHistoryLine, RiLoader4Line } from "@remixicon/react";
+import {
+  RiGitCommitLine,
+  RiHistoryLine,
+  RiLoader4Line,
+} from "@remixicon/react";
 import { isImagePath } from "@shared/image";
 import { useEffect, useState, useTransition } from "react";
 import {
+  applyLines,
   fileHunkDiffs,
   revertHunk,
   revertWorkingHunk,
@@ -87,6 +92,11 @@ export function WorkingDiff({ file }: { file: string }) {
               <RiHistoryLine /> Blame
             </Link>
           </Button>
+          <Button asChild variant="ghost" size="xs">
+            <Link href={{ pathname: "/file-history", query: { file } }}>
+              <RiGitCommitLine /> History
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -103,6 +113,12 @@ export function WorkingDiff({ file }: { file: string }) {
           }
           onRevertHunk={(i) =>
             act(() => revertWorkingHunk(file, i), "Reverted hunk")
+          }
+          onApplyLines={(lines, mode) =>
+            act(
+              () => applyLines(file, lines, mode),
+              mode === "stage" ? "Staged lines" : "Discarded lines",
+            )
           }
         />
       ) : (
