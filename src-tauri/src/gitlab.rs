@@ -1,11 +1,11 @@
 // GitLab provider: GitLab REST API v4, normalized into the SAME JSON shapes the
 // GitHub module returns (shared/types.ts), so the existing PR workspace UI works
-// unchanged. Auth is a personal access token (PRIVATE-TOKEN header), stored per
-// provider in the OS keychain. Routed here by provider.rs when the active repo's
-// origin is gitlab.com.
+// unchanged. Auth is a bearer token (PAT or OAuth device-flow token, both valid
+// in `Authorization: Bearer`), stored per provider in the OS keychain. Routed
+// here by provider.rs when the active repo's origin is gitlab.com.
 use crate::provider::{self, Provider};
 use crate::{secrets, AppState};
-use reqwest::header::{ACCEPT, USER_AGENT};
+use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use reqwest::Method;
 use serde_json::{json, Value};
 use tauri::AppHandle;
@@ -46,7 +46,7 @@ async fn gl_fetch(
     let mut req = st
         .http
         .request(method, format!("https://{host}/api/v4{path}"))
-        .header("PRIVATE-TOKEN", token)
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .header(ACCEPT, "application/json")
         .header(USER_AGENT, "OpenGit");
     if let Some(b) = &body {
@@ -117,15 +117,19 @@ async fn status(st: &AppState) -> Value {
     let Some(token) = secrets::get_token_for(ACCOUNT) else {
         return json!({ "connected": false });
     };
-    // Use the active repo's host (self-managed support); default gitlab.com.
+    // Use the active repo's host only when it's itself a GitLab remote (self-
+    // managed support); otherwise default gitlab.com — the accounts panel signs
+    // in with no GitLab repo open, or with a different provider's repo active.
     let host = provider::active_remote(st)
         .await
+        .ok()
+        .filter(|(p, _, _)| *p == Provider::GitLab)
         .map(|(_, h, _)| h)
-        .unwrap_or_else(|_| "gitlab.com".into());
+        .unwrap_or_else(|| "gitlab.com".into());
     let res = st
         .http
         .get(format!("https://{host}/api/v4/user"))
-        .header("PRIVATE-TOKEN", token)
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .header(ACCEPT, "application/json")
         .header(USER_AGENT, "OpenGit")
         .send()
@@ -354,7 +358,17 @@ fn s(args: &[Value], idx: usize) -> String {
     args.get(idx).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-pub async fn dispatch(st: &AppState, _app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
+/// Public OAuth application client id for the device flow (no secret needed).
+/// Baked from OPENGIT_GITLAB_CLIENT_ID at build time, runtime env for `tauri dev`.
+fn client_id() -> String {
+    option_env!("OPENGIT_GITLAB_CLIENT_ID")
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .or_else(|| std::env::var("OPENGIT_GITLAB_CLIENT_ID").ok().map(|s| s.trim().to_string()))
+        .unwrap_or_default()
+}
+
+pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
     match name {
         "tokenStatus" => status(st).await,
         "setToken" => set_token(st, &s(&args, 0)).await,
@@ -362,7 +376,20 @@ pub async fn dispatch(st: &AppState, _app: &AppHandle, name: &str, args: Vec<Val
             secrets::clear_token_for(ACCOUNT);
             Value::Null
         }
-        "deviceStart" => json!({ "error": "GitLab login uses a personal access token — paste one with the token option." }),
+        "deviceStart" => {
+            crate::oauth::device_start(
+                app,
+                &st.http,
+                crate::oauth::DeviceCfg {
+                    client_id: client_id(),
+                    scope: "api".into(),
+                    device_url: "https://gitlab.com/oauth/authorize_device".into(),
+                    token_url: "https://gitlab.com/oauth/token".into(),
+                    account: ACCOUNT.into(),
+                },
+            )
+            .await
+        }
         "repoContext" => match provider::active_remote(st).await {
             Ok((_, _, path)) => {
                 let (owner, repo) = path.rsplit_once('/').unwrap_or(("", path.as_str()));

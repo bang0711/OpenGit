@@ -25,19 +25,27 @@ fn dotenv_value(key: &str) -> Option<String> {
 }
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=OPENGIT_GH_CLIENT_ID");
     println!("cargo:rerun-if-changed=../.env");
 
-    // Prefer a real env var (CI sets it from vars.OPENGIT_GH_CLIENT_ID); fall back
-    // to .env so local `tauri dev` / `tauri build` bake the public client id too.
-    let cid = std::env::var("OPENGIT_GH_CLIENT_ID")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| dotenv_value("OPENGIT_GH_CLIENT_ID"));
-    if let Some(cid) = cid {
-        // option_env!("OPENGIT_GH_CLIENT_ID") in github.rs now resolves to this.
-        println!("cargo:rustc-env=OPENGIT_GH_CLIENT_ID={cid}");
+    // Bake each provider's OAuth config so option_env!(KEY) resolves in the
+    // provider modules. Prefer a real env var (CI sets these from repo secrets/
+    // vars); fall back to .env for local `tauri dev` / `tauri build`.
+    const KEYS: &[&str] = &[
+        "OPENGIT_GH_CLIENT_ID",
+        "OPENGIT_GITLAB_CLIENT_ID",
+        "OPENGIT_AZURE_CLIENT_ID",
+        "OPENGIT_AZURE_TENANT",
+    ];
+    for key in KEYS {
+        println!("cargo:rerun-if-env-changed={key}");
+        let val = std::env::var(key)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| dotenv_value(key));
+        if let Some(val) = val {
+            println!("cargo:rustc-env={key}={val}");
+        }
     }
 
     tauri_build::build();

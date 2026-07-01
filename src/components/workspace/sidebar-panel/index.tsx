@@ -16,7 +16,7 @@ import {
   publishBranch,
 } from "@/app/actions";
 import { ActionTooltip } from "@/components/action-tooltip";
-import { GithubAccount } from "@/components/github-account";
+import { ProviderAccounts } from "@/components/provider-accounts";
 import { NameDialog } from "@/components/name-dialog";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
@@ -229,7 +229,7 @@ export function SidebarPanel({ branches, remotes, tags, stashes }: Props) {
       </ScrollArea>
 
       <div className="border-border shrink-0 border-t p-2">
-        <GithubAccount />
+        <ProviderAccounts />
       </div>
 
       <NameDialog

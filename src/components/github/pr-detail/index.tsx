@@ -62,7 +62,8 @@ export function PrDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [number]);
 
-  // Relay event → silent background refresh of the open PR (keep it on screen).
+  // refreshKey bump (parent Refresh / reload) → silent background refresh of the
+  // open PR, keeping it on screen.
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {

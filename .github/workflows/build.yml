@@ -57,6 +57,9 @@ jobs:
       uses: tauri-apps/tauri-action@v0
       env:
         OPENGIT_GH_CLIENT_ID: ${{ vars.OPENGIT_GH_CLIENT_ID }}
+        OPENGIT_GITLAB_CLIENT_ID: ${{ vars.OPENGIT_GITLAB_CLIENT_ID }}
+        OPENGIT_AZURE_CLIENT_ID: ${{ vars.OPENGIT_AZURE_CLIENT_ID }}
+        OPENGIT_AZURE_TENANT: ${{ vars.OPENGIT_AZURE_TENANT }}
       with:
         tauriScript: bun run tauri
         # No tagName → just build, don't publish a release.

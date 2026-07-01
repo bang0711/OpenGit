@@ -3,11 +3,11 @@
 // shapes from shared/types.ts. Logical errors come back as `{ "error": msg }`
 // objects (not Err) so the renderer's `if ("error" in res)` checks keep working.
 mod azure;
-mod bitbucket;
 mod diff_hunks;
 mod git;
 mod github;
 mod gitlab;
+mod oauth;
 mod path_utils;
 mod provider;
 mod repo_lock;

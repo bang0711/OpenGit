@@ -88,10 +88,13 @@ jobs:
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # GitHub OAuth App client id baked into the binary at build time (public —
-        # device flow has no secret). Set this repo/org Actions variable so released
-        # installers ship with one-click login enabled.
+        # Provider OAuth config baked into the binary at build time so released
+        # installers ship with one-click login. Client ids/tenant are public
+        # (Actions *variables*). Unset ones bake empty → paste-a-token fallback.
         OPENGIT_GH_CLIENT_ID: ${{ vars.OPENGIT_GH_CLIENT_ID }}
+        OPENGIT_GITLAB_CLIENT_ID: ${{ vars.OPENGIT_GITLAB_CLIENT_ID }}
+        OPENGIT_AZURE_CLIENT_ID: ${{ vars.OPENGIT_AZURE_CLIENT_ID }}
+        OPENGIT_AZURE_TENANT: ${{ vars.OPENGIT_AZURE_TENANT }}
       with:
         # Use bun to drive the Tauri CLI (matches local scripts).
         tauriScript: bun run tauri

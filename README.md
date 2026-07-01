@@ -2,8 +2,9 @@
 
 A desktop Git client in the spirit of GitKraken — a visual commit graph,
 branch/remote/tag/stash management, staging and committing, interactive rebase,
-side-by-side diffs, conflict resolution, and **GitHub integration** (sign in,
-clone your repos, manage pull requests). A React single-page app in a **Tauri**
+side-by-side diffs, conflict resolution, and **multi-host integration** —
+GitHub, GitLab, Azure DevOps (sign in, clone your repos, manage
+pull/merge requests). A React single-page app in a **Tauri**
 window (native OS webview); all Git operations run in a **Rust backend** via your
 local `git` and are reached from the UI through Tauri commands.
 
@@ -17,7 +18,7 @@ local `git` and are reached from the UI through Tauri commands.
 - **Diffs** — Azure-style side-by-side (with **Prism syntax highlighting**) and unified views, Material file icons, instant client-side file switching.
 - **Conflict resolver** — ours/theirs/manual, for merges and rebases. **Blame** view.
 - **Live refresh** — the backend watches the repo (the `notify` crate) and pushes a `repo:changed` event, so edits show up without a manual reload.
-- **GitHub** — sign in (OAuth Device Flow or token), **clone any repo from your account**, and a full **pull-request** workspace: list/filter, per-file diffs, checks, reviews & comments, merge / close, create PRs with reviewers, plus collaborators / issues / branches. Optional **real-time** PR updates via a self-hosted webhook relay.
+- **Git hosts** — sign in to **GitHub or GitLab** (browser OAuth or token; the host is auto-detected from the repo's origin — **Azure DevOps coming soon**), **clone any repo from your account**, and a full **pull/merge-request** workspace: list/filter, per-file diffs, checks, reviews & comments, merge / close, create with reviewers, plus collaborators / issues / branches.
 - **Updates + version picker** — the **Versions** button checks GitHub Releases and lets you download **and install any version** (up or downgrade), cross-platform.
 
 ## Upgrading from the Electron version
@@ -41,39 +42,49 @@ After that, in-app updates work again. Notes:
 - The two installs don't collide (different install dirs), but the old one keeps
   failing its update-check until you remove it.
 
-## GitHub integration
+## Git host integration
 
-Sign in once (the token is stored in your OS keychain and shared across clone +
-the PR workspace) and OpenGit can clone your repositories and manage pull requests.
+OpenGit talks to **GitHub, GitLab, and Azure DevOps** — the active
+host is detected from the open repo's `origin`, so the same pull/merge-request
+workspace works everywhere. Sign in from the sidebar **Accounts** panel; each
+token is stored in your OS keychain (never in app files) and shared across clone
++ the PR workspace.
 
-### Sign-in & the OAuth App (one-time, for the maintainer)
+Every host offers a **paste-a-token** option that always works. Registering an
+OAuth app additionally enables one-click **browser sign-in** ("Sign in with …").
 
-Login uses GitHub's **OAuth Device Flow** — no client secret, no redirect
-server. Like GitKraken, OpenGit ships its own OAuth App so end users just click
-**Sign in with GitHub**. To enable that, register the app once:
+### OAuth apps (one-time, for the maintainer)
 
-1. GitHub → Settings → Developer settings → **OAuth Apps → New OAuth App**.
-2. **Homepage URL** and **Authorization callback URL**: any valid URL (device
-   flow never redirects, but both fields are required) — e.g. your repo URL.
-3. Tick **Enable Device Flow**. Do **not** create a client secret.
-4. Copy the **Client ID** and build with it set:
+Client ids/tenant are **public** and baked into the binary at build time
+(`src-tauri/build.rs` → `option_env!(KEY)`, read in each provider module); in
+`tauri dev` the same env vars are read at runtime. Put them in the repo-root
+`.env` (see `.env.sample`) or export them before a build. Any provider left
+blank falls back to paste-a-token.
 
-   ```bash
-   OPENGIT_GH_CLIENT_ID=Ov23li… bun run build
-   ```
+| Host | Flow | Env |
+|------|------|-----|
+| GitHub | OAuth device flow | `OPENGIT_GH_CLIENT_ID` |
+| GitLab | OAuth device flow | `OPENGIT_GITLAB_CLIENT_ID` |
+| Azure DevOps _(coming soon)_ | Entra device code | `OPENGIT_AZURE_CLIENT_ID` (+ `OPENGIT_AZURE_TENANT`) |
 
-The client id is **public** (device flow has no secret) and is baked into the
-binary at build time (`src-tauri/build.rs` → `option_env!("OPENGIT_GH_CLIENT_ID")`,
-read in `src-tauri/src/github.rs`), so it stays out of the source. In `tauri dev`
-the same env var is read at runtime as a fallback. Without it, the **Use a
-personal access token** fallback still works.
+**GitHub** — Settings → Developer settings → **OAuth Apps → New OAuth App**.
+Homepage + callback URL: any valid URL (device flow never redirects, both fields
+required). Tick **Enable Device Flow**. No secret. Copy the **Client ID**.
 
-### Real-time pull requests (optional)
+**GitLab** — [Settings → Applications](https://gitlab.com/-/user_settings/applications)
+→ **Add new application**. Redirect URI: `http://localhost` (required, unused).
+Check **Device authorization grant**, uncheck **Confidential**, scope **`api`**.
+Copy the **Application ID**.
 
-By default the PR page refreshes on demand. For live push updates, run the tiny
-self-hosted webhook relay in [`examples/webhook-relay/`](./examples/webhook-relay/)
-and paste its URL into **GitHub → Settings** in the app — GitHub webhooks then
-stream to OpenGit over WebSocket (it filters by repo). See that folder's README.
+**Azure DevOps** _(coming soon — sign-in is disabled in the app; the backend is
+wired and ready to flip on)_ — register an app in **Microsoft Entra ID** (portal.azure.com →
+App registrations → New registration; multitenant, no redirect URI). Copy the
+**Application (client) ID**. In **Authentication**, set **Allow public client
+flows = Yes**. In **API permissions**, add **Azure DevOps → user_impersonation**.
+Leave `OPENGIT_AZURE_TENANT` blank (defaults `organizations`) or set a tenant
+GUID to lock to one org. Your Azure DevOps org must allow OAuth (Org settings →
+Policies → *Third-party application access via OAuth*). Note: Entra access tokens
+expire ~1h — you re-sign-in until refresh-token support lands.
 
 ## Architecture
 
@@ -180,8 +191,11 @@ bun run release
 triggers `.github/workflows/release.yml`: it **runs tests first**, then builds
 Windows / macOS / Linux with [`tauri-action`](https://github.com/tauri-apps/tauri-action)
 on their runners, uploads to a draft Release, and once all three succeed flips it
-to **published** (no partial releases). Set the repo/org Actions variable
-`OPENGIT_GH_CLIENT_ID` so released installers ship with one-click login.
+to **published** (no partial releases). For one-click login in released
+installers, set the OAuth config as repo/org **Actions variables** —
+`OPENGIT_GH_CLIENT_ID`, `OPENGIT_GITLAB_CLIENT_ID`, `OPENGIT_AZURE_CLIENT_ID`,
+`OPENGIT_AZURE_TENANT`. Unset ones bake empty (paste-a-token fallback). See
+**Git host integration** above for how to obtain each.
 
 ### Code signing (Windows)
 

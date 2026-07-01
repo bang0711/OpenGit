@@ -399,6 +399,17 @@ export interface Github {
   >;
   /** Fires when device-flow login completes (success or failure). */
   onAuth(cb: (status: GhStatus) => void): () => void;
+  // Provider-explicit auth (accounts panel): target any host by key
+  // ("github"/"gitlab"/"azure") without an open repo of that host.
+  providerStatus(provider: string): Promise<GhStatus>;
+  providerSetToken(provider: string, token: string): Promise<GhStatus>;
+  providerClearToken(provider: string): Promise<void>;
+  providerDeviceStart(
+    provider: string,
+  ): Promise<
+    | { userCode: string; verificationUri: string; expiresIn: number }
+    | { error: string }
+  >;
   repoContext(): Promise<{ owner: string; repo: string } | null>;
   /** Drop the ETag cache so the next reads force fresh data (manual refresh). */
   invalidate(): Promise<void>;

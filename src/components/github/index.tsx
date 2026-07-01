@@ -4,13 +4,11 @@ import {
   RiAddLine,
   RiArrowLeftLine,
   RiErrorWarningLine,
-  RiFlashlightLine,
   RiGitBranchLine,
   RiGithubFill,
   RiGitPullRequestLine,
   RiLogoutBoxRLine,
   RiRefreshLine,
-  RiSettings3Line,
   RiTeamLine,
 } from "@remixicon/react";
 import type {
@@ -29,8 +27,6 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { usePersistedState } from "@/hooks/use-persisted-state";
-import { useRealtime } from "@/hooks/use-realtime";
 import {
   Sidebar,
   SidebarContent,
@@ -46,13 +42,11 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import Link from "@/lib/link";
-import { cn } from "@/lib/utils";
 import { ConnectForm } from "./connect-form";
 import { CreatePrDialog } from "./create-pr-dialog";
 import { Branches, Collaborators, Issues } from "./lists";
 import { PrDetail } from "./pr-detail";
 import { PrList } from "./pr-list";
-import { Settings } from "./settings";
 import { PrListSkeleton } from "./skeletons";
 
 type Lists = {
@@ -64,14 +58,13 @@ type Lists = {
 const EMPTY: Lists = { prs: [], collaborators: [], issues: [], branches: [] };
 const arr = <T,>(x: T[] | { error: string }): T[] => (Array.isArray(x) ? x : []);
 
-type Section = "prs" | "issues" | "collab" | "branches" | "settings";
+type Section = "prs" | "issues" | "collab" | "branches";
 
 const SECTION_LABEL: Record<Section, string> = {
   prs: "Pull Requests",
   issues: "Issues",
   collab: "People",
   branches: "Branches",
-  settings: "Settings",
 };
 
 export function GithubPanel() {
@@ -82,8 +75,6 @@ export function GithubPanel() {
   const [selectedPr, setSelectedPr] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [repo, setRepo] = useState("");
-  const [relayUrl, setRelayUrl] = usePersistedState("opengit.gh.relay", "");
 
   // Fetch in the component (not a route loader) so navigation is instant.
   const load = useCallback(async () => {
@@ -112,15 +103,10 @@ export function GithubPanel() {
     }
   }, []);
 
-  // One-time load on mount (no polling). Realtime updates come from the relay.
+  // One-time load on mount (no polling); use the Refresh button to re-pull.
   useEffect(() => {
     load();
   }, [load]);
-
-  // Identify the repo once so the relay can subscribe to it.
-  useEffect(() => {
-    window.github.repoContext().then((c) => setRepo(c ? `${c.owner}/${c.repo}` : ""));
-  }, []);
 
   // Reload lists + open PR detail (the detail reloads when refreshKey changes).
   const reload = () => {
@@ -133,10 +119,6 @@ export function GithubPanel() {
     await window.github.invalidate();
     reload();
   };
-
-  // Push-based real-time: refetch lists + open PR whenever the relay forwards a
-  // webhook event for this repo (ETag-cached, cheap).
-  const rtStatus = useRealtime(relayUrl, repo, reload);
 
   const disconnect = async () => {
     await window.github.clearToken();
@@ -204,16 +186,6 @@ export function GithubPanel() {
                   <SidebarMenuBadge>{n.count}</SidebarMenuBadge>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  tooltip="Settings"
-                  isActive={section === "settings"}
-                  onClick={() => setSection("settings")}
-                >
-                  <RiSettings3Line />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>
@@ -240,30 +212,6 @@ export function GithubPanel() {
             {SECTION_LABEL[section]}
           </span>
           <div className="ml-auto flex items-center gap-2">
-            <ActionTooltip
-              label={
-                rtStatus === "live"
-                  ? "Real-time: live"
-                  : relayUrl
-                    ? "Real-time: disconnected"
-                    : "Real-time off — set up a relay in Settings"
-              }
-            >
-              <button
-                type="button"
-                onClick={() => setSection("settings")}
-                className="text-muted-foreground flex items-center gap-1.5 text-[0.7rem]"
-              >
-                <RiFlashlightLine
-                  className={cn(
-                    "size-3.5",
-                    rtStatus === "live" && "text-[#3fb950]",
-                    rtStatus === "error" && "text-[#f85149]",
-                  )}
-                />
-                {rtStatus === "live" ? "Live" : "Off"}
-              </button>
-            </ActionTooltip>
             <ActionTooltip label="Refresh">
               <Button variant="ghost" size="icon" onClick={refresh}>
                 <RiRefreshLine />
@@ -320,15 +268,8 @@ export function GithubPanel() {
                   <Issues issues={data.issues} />
                 ) : section === "collab" ? (
                   <Collaborators collaborators={data.collaborators} />
-                ) : section === "branches" ? (
-                  <Branches branches={data.branches} />
                 ) : (
-                  <Settings
-                    relayUrl={relayUrl}
-                    status={rtStatus}
-                    repo={repo}
-                    onSave={setRelayUrl}
-                  />
+                  <Branches branches={data.branches} />
                 )}
               </div>
             </ScrollArea>

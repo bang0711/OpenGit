@@ -1,17 +1,27 @@
 // Git hosting provider detection + routing. The active provider is inferred from
 // the open repo's origin host, so the existing `gh_call` surface (and the whole
-// PR workspace UI) works for GitHub / GitLab / Bitbucket / Azure unchanged — each
+// PR workspace UI) works for GitHub / GitLab / Azure unchanged — each
 // backend module normalizes its REST responses into the same shared shapes.
 use crate::{repo_registry, AppState};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tauri::AppHandle;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Provider {
     GitHub,
     GitLab,
-    Bitbucket,
     Azure,
+}
+
+/// Provider from its stable key ("github"/"gitlab"/"azure"), used by
+/// the accounts UI to target a specific host regardless of the open repo.
+pub fn from_key(k: &str) -> Option<Provider> {
+    match k {
+        "github" => Some(Provider::GitHub),
+        "gitlab" => Some(Provider::GitLab),
+        "azure" => Some(Provider::Azure),
+        _ => None,
+    }
 }
 
 pub fn detect(url: &str) -> Option<Provider> {
@@ -20,8 +30,6 @@ pub fn detect(url: &str) -> Option<Provider> {
         Some(Provider::GitHub)
     } else if u.contains("gitlab.com") {
         Some(Provider::GitLab)
-    } else if u.contains("bitbucket.org") {
-        Some(Provider::Bitbucket)
     } else if u.contains("dev.azure.com") || u.contains("visualstudio.com") {
         Some(Provider::Azure)
     } else {
@@ -75,9 +83,30 @@ pub async fn active(st: &AppState) -> Provider {
 
 /// Route a `gh_call` to the active provider's backend module.
 pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
-    match active(st).await {
+    // Explicit-provider auth ops (accounts UI): args[0] = provider key, the rest
+    // are the underlying op's args. Lets the user sign in to any host without
+    // first opening a repo of that host. Everything else routes to the active repo.
+    let explicit: Option<&str> = match name {
+        "providerStatus" => Some("tokenStatus"),
+        "providerSetToken" => Some("setToken"),
+        "providerClearToken" => Some("clearToken"),
+        "providerDeviceStart" => Some("deviceStart"),
+        _ => None,
+    };
+    if let Some(inner) = explicit {
+        let key = args.first().and_then(Value::as_str).unwrap_or_default();
+        let Some(p) = from_key(key) else {
+            return json!({ "error": format!("Unknown provider: {key}") });
+        };
+        let rest: Vec<Value> = args.into_iter().skip(1).collect();
+        return dispatch_to(p, st, app, inner, rest).await;
+    }
+    dispatch_to(active(st).await, st, app, name, args).await
+}
+
+async fn dispatch_to(p: Provider, st: &AppState, app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
+    match p {
         Provider::GitLab => crate::gitlab::dispatch(st, app, name, args).await,
-        Provider::Bitbucket => crate::bitbucket::dispatch(st, app, name, args).await,
         Provider::Azure => crate::azure::dispatch(st, app, name, args).await,
         Provider::GitHub => crate::github::dispatch(st, app, name, args).await,
     }
@@ -91,7 +120,6 @@ mod tests {
     fn detects_hosts() {
         assert_eq!(detect("https://github.com/a/b.git"), Some(Provider::GitHub));
         assert_eq!(detect("git@gitlab.com:a/b.git"), Some(Provider::GitLab));
-        assert_eq!(detect("https://bitbucket.org/a/b"), Some(Provider::Bitbucket));
         assert_eq!(detect("https://dev.azure.com/o/p/_git/r"), Some(Provider::Azure));
         assert_eq!(detect("https://example.com/a/b"), None);
     }

@@ -48,7 +48,31 @@ async fn az_context(st: &AppState) -> Result<Ctx, String> {
 }
 
 fn auth(token: &str) -> String {
-    format!("Basic {}", STANDARD.encode(format!(":{token}")))
+    // Entra OAuth access tokens are JWTs (two dots); a PAT has none. Send the
+    // former as Bearer, the latter as HTTP Basic (":pat").
+    if token.contains('.') {
+        format!("Bearer {token}")
+    } else {
+        format!("Basic {}", STANDARD.encode(format!(":{token}")))
+    }
+}
+
+/// Entra app (public client) id + tenant for the device-code flow. Baked from
+/// OPENGIT_AZURE_CLIENT_ID / OPENGIT_AZURE_TENANT, runtime env for `tauri dev`.
+fn client_id() -> String {
+    option_env!("OPENGIT_AZURE_CLIENT_ID")
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .or_else(|| std::env::var("OPENGIT_AZURE_CLIENT_ID").ok().map(|s| s.trim().to_string()))
+        .unwrap_or_default()
+}
+
+fn tenant() -> String {
+    option_env!("OPENGIT_AZURE_TENANT")
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .or_else(|| std::env::var("OPENGIT_AZURE_TENANT").ok().filter(|s| !s.trim().is_empty()).map(|s| s.trim().to_string()))
+        .unwrap_or_else(|| "organizations".into())
 }
 
 async fn az_fetch(st: &AppState, url: &str, method: Method, body: Option<Value>) -> Result<Value, String> {
@@ -360,7 +384,7 @@ fn s(args: &[Value], idx: usize) -> String {
     args.get(idx).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-pub async fn dispatch(st: &AppState, _app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
+pub async fn dispatch(st: &AppState, app: &AppHandle, name: &str, args: Vec<Value>) -> Value {
     match name {
         "tokenStatus" => status(st).await,
         "setToken" => set_token(st, &s(&args, 0)).await,
@@ -368,7 +392,22 @@ pub async fn dispatch(st: &AppState, _app: &AppHandle, name: &str, args: Vec<Val
             secrets::clear_token_for(ACCOUNT);
             Value::Null
         }
-        "deviceStart" => json!({ "error": "Azure DevOps login uses a Personal Access Token — paste one with the token option." }),
+        "deviceStart" => {
+            let t = tenant();
+            crate::oauth::device_start(
+                app,
+                &st.http,
+                crate::oauth::DeviceCfg {
+                    client_id: client_id(),
+                    // Azure DevOps resource; .default = the app's configured perms.
+                    scope: "499b84ac-1321-427f-aa17-267ca6975798/.default".into(),
+                    device_url: format!("https://login.microsoftonline.com/{t}/oauth2/v2.0/devicecode"),
+                    token_url: format!("https://login.microsoftonline.com/{t}/oauth2/v2.0/token"),
+                    account: ACCOUNT.into(),
+                },
+            )
+            .await
+        }
         "repoContext" => match az_context(st).await {
             Ok(c) => json!({ "owner": c.project, "repo": c.repo }),
             Err(_) => Value::Null,
