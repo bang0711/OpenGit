@@ -1,6 +1,13 @@
 // Renderer-side shim: the old Next server actions now live in the main process
 // and are reached over IPC (window.api). Re-exported here under the same names
 // so existing component imports (`@/app/actions`) keep working unchanged.
+//
+// The bridge import is load-bearing: this module reads window.api at eval time,
+// and "main.tsx imports the bridge first" is NOT enough once the bundler splits
+// this file into a shared chunk that evaluates before main's chunk body (the
+// production black-screen bug). An explicit edge makes the order a guarantee.
+import "@/bridge";
+
 export type {
   ActionState,
   DirEntry,

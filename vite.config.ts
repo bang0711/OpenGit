@@ -16,12 +16,7 @@ export default defineConfig({
       "@shared": resolve(__dirname, "shared"),
     },
   },
-  plugins: [
-    // React Compiler auto-memoizes components/hooks → fewer re-renders (helps the
-    // commit-graph-heavy UI). React 19 needs no runtime package.
-    react({ babel: { plugins: [["babel-plugin-react-compiler", {}]] } }),
-    tailwindcss(),
-  ],
+  plugins: [react(), tailwindcss()],
   // Tauri needs a fixed port it can wait on; fail rather than hop ports.
   clearScreen: false,
   server: {
@@ -34,9 +29,5 @@ export default defineConfig({
     outDir: resolve(__dirname, "dist"),
     emptyOutDir: true,
     rollupOptions: { input: resolve(__dirname, "src/index.html") },
-    // The renderer loads from local disk inside the Tauri webview — there's no
-    // network download, so a single ~1.3MB bundle is fine. Silence the
-    // website-oriented chunk-size warning.
-    chunkSizeWarningLimit: 2000,
   },
 });

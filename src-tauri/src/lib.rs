@@ -7,6 +7,7 @@ mod diff_hunks;
 mod git;
 mod github;
 mod gitlab;
+mod logger;
 mod oauth;
 mod path_utils;
 mod provider;
@@ -37,6 +38,18 @@ pub struct AppState {
 
 const REWATCH: [&str; 3] = ["openRepo", "cloneRepo", "closeRepo"];
 
+/// Log dispatcher results carrying `{ "error": … }` — one central hook covers
+/// every backend failure. Command name only; args can carry tokens.
+fn log_error_result(source: &str, name: &str, result: &Value) {
+    if let Some(e) = result.get("error").and_then(Value::as_str) {
+        // Expected control-flow responses, not failures — keep them out of the log.
+        if e == "No active repository." {
+            return;
+        }
+        logger::error(&format!("{source}:{name}"), e);
+    }
+}
+
 #[tauri::command]
 async fn api_call(
     name: String,
@@ -50,6 +63,7 @@ async fn api_call(
         let repo = repo_ops::active_repo_path(st).await;
         st.watch.rewatch(&app, repo);
     }
+    log_error_result("api", &name, &result);
     Ok(result)
 }
 
@@ -60,7 +74,9 @@ async fn gh_call(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    Ok(provider::dispatch(state.inner(), &app, &name, args).await)
+    let result = provider::dispatch(state.inner(), &app, &name, args).await;
+    log_error_result("gh", &name, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -70,7 +86,9 @@ async fn updater_call(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    Ok(updater::dispatch(state.inner(), &app, &name, args).await)
+    let result = updater::dispatch(state.inner(), &app, &name, args).await;
+    log_error_result("updater", &name, &result);
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -78,6 +96,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            logger::init();
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -106,6 +125,7 @@ pub fn run() {
             api_call,
             gh_call,
             updater_call,
+            logger::renderer_log,
             terminal::terminal_start,
             terminal::terminal_input,
             terminal::terminal_resize,

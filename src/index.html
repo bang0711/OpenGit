@@ -4,6 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OpenGit</title>
+    <script>
+      // Boot-error trap: registers BEFORE the module bundle so a crash during
+      // module evaluation (which main.tsx's own hooks can't see) still reaches
+      // the backend log. Needs app.withGlobalTauri for window.__TAURI__.
+      (function () {
+        function report(msg) {
+          try {
+            var t = window.__TAURI__;
+            if (t && t.core)
+              t.core.invoke("renderer_log", {
+                level: "error",
+                message: "boot: " + msg,
+              });
+          } catch (_) {}
+        }
+        window.addEventListener("error", function (e) {
+          report(
+            (e.message || "unknown error") +
+              " (" +
+              (e.filename || "?") +
+              ":" +
+              (e.lineno || 0) +
+              ")",
+          );
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          report("unhandled rejection: " + String(e.reason));
+        });
+      })();
+    </script>
   </head>
   <body class="bg-background text-foreground h-full">
     <div id="root"></div>
